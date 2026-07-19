@@ -1,0 +1,80 @@
+name: State law update
+description: Report a new, changed, or repealed ALPR siting/placement law for a state.
+title: "[Law] <state>: "
+labels: ["state-law"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping keep the legal data accurate. A few pointers before you start:
+
+        - This project only tracks laws restricting the **physical placement/siting** of ALPRs
+          (near schools, worship, healthcare, courts, food banks, or on certain road types).
+          Retention/access/use rules are out of scope beyond a one-line note.
+        - Good starting points: the [LAPPA 50-state summary](https://legislativeanalysis.org/automatic-license-plate-recognition-systems-summary-of-state-laws/),
+          the [ObscureIQ legality map](https://www.obscureiq.com/license-plate-surveillance-legality/),
+          [Stateline coverage](https://stateline.org), and your state legislature's bill tracker.
+        - Please link the **primary statute or bill text** if you can find it; secondary
+          sources are fine to get started but the entry won't be marked verified without it.
+        - Current entries live in `rules/alpr_state_rules.yaml`; the last full survey is
+          archived under `docs/research/`.
+  - type: input
+    id: state
+    attributes:
+      label: State
+      placeholder: e.g. Virginia
+    validations:
+      required: true
+  - type: dropdown
+    id: change-type
+    attributes:
+      label: What changed?
+      options:
+        - New siting law enacted
+        - Existing law amended
+        - Law repealed or struck down
+        - Pending bill worth watching
+        - Correction to current entry
+    validations:
+      required: true
+  - type: input
+    id: citation
+    attributes:
+      label: Statute or bill citation
+      placeholder: e.g. VA HB 2724 / Va. Code § 46.2-XXX
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Source link
+      description: Primary statute/bill text preferred; a tracker or news link is OK to start.
+      placeholder: https://
+    validations:
+      required: true
+  - type: textarea
+    id: placement-language
+    attributes:
+      label: Placement language
+      description: >-
+        Quote the part of the law that restricts WHERE cameras can go. Note whether it
+        gives a numeric distance or vague language ("on or immediately surrounding") -
+        we never invent numbers for vague statutes.
+      placeholder: '"on or within the boundaries of ..." - no numeric distance given'
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Effective date, excluded camera types, protected categories covered, etc.
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Do you want to contribute the update yourself?
+      description: >-
+        Either answer is welcome. If yes, a maintainer will point you at the
+        rules-file format and review checklist.
+      options:
+        - Yes, I'd like to open the PR
+        - No, just reporting it
+    validations:
+      required: true
