@@ -1,0 +1,616 @@
+/* ALPR Siting Compliance Map - static frontend (MapLibre GL). */
+"use strict";
+
+const COLORS = {
+  flagged: "#e0332c",
+  clear: "#2e7dd1",
+  excluded: "#8d6e2f",
+  law: "#8a3ffc",
+  nolaw: "#9aa1a9",
+};
+
+const CATEGORY_LABELS = {
+  school: "school",
+  place_of_worship: "place of worship",
+  healthcare_facility: "healthcare facility",
+  courthouse: "courthouse",
+  food_bank: "food bank",
+};
+
+let META = null; // rules.json content
+let RULES_BY_ID = {};
+let CAMS = null;   // cameras.geojson, mutated when the radius sliders move
+let CONES = null;  // view_cones.geojson, kept in sync with camera status
+let ALL_MATCHES = {}; // camera_id -> all candidate matches (unfiltered)
+let CLOSE_M = 100;  // "close by" heuristic radius (statute gives no number)
+let ONPREM_M = 50;  // "on premises" heuristic radius (on-property language)
+
+/* Protected-place icons: Maki (Mapbox's CC0 map icon set), drawn as a
+   white glyph on an orange badge. web/assets/icons/ holds the SVGs. */
+const PLACE_ICONS = {
+  "ff-school": "school",
+  "ff-health": "hospital",
+  "ff-court": "town-hall",
+  "ff-food": "grocery",
+  "ff-worship": "place-of-worship",
+  "ff-worship-christian": "religious-christian",
+  "ff-worship-muslim": "religious-muslim",
+  "ff-worship-jewish": "religious-jewish",
+  "ff-place": "marker",
+};
+const BADGE_FILL = "#c2620d";
+const BADGE_RING = "rgba(0, 0, 0, .35)";
+
+async function loadPlaceIcon(map, name, file) {
+  const svgText = await (await fetch(`assets/icons/${file}.svg`)).text();
+  const white = svgText.replace(
+    "<svg ",
+    '<svg fill="#ffffff" '
+  );
+  const glyph = new Image();
+  await new Promise((resolve, reject) => {
+    glyph.onload = resolve;
+    glyph.onerror = reject;
+    glyph.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(white);
+  });
+  const size = 56;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d");
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2 - 2, 0, Math.PI * 2);
+  ctx.fillStyle = BADGE_FILL;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = BADGE_RING;
+  ctx.stroke();
+  const g = 32; // glyph box
+  ctx.drawImage(glyph, (size - g) / 2, (size - g) / 2, g, g);
+  map.addImage(name, ctx.getImageData(0, 0, size, size), { pixelRatio: 2 });
+}
+
+const map = new maplibregl.Map({
+  container: "map",
+  style: {
+    version: 8,
+    sources: {
+      osm: {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        attribution: "© OpenStreetMap contributors",
+      },
+    },
+    layers: [{ id: "osm", type: "raster", source: "osm" }],
+  },
+  center: [-98, 39],
+  zoom: 4,
+  attributionControl: {
+    compact: false,
+    customAttribution:
+      '<a href="https://overturemaps.org" target="_blank" rel="noopener">&copy; Overture Maps Foundation</a> | ' +
+      'Made by <a href="https://github.com/lowlydba" target="_blank" rel="noopener">lowlydba</a>',
+  },
+});
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "bottom-right");
+map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: "metric" }), "bottom-left");
+map.addControl(new maplibregl.FullscreenControl(), "bottom-right");
+
+map.on("load", async () => {
+  META = await (await fetch("data/rules.json")).json();
+  for (const r of META.rules) RULES_BY_ID[r.rule_id] = r;
+  const SLIDERS = META.sliders || {
+    close_by: { min: 50, max: 400, step: 25, default: META.default_heuristic_buffer_m || 100 },
+    on_premises: { min: 10, max: 150, step: 10, default: 50 },
+  };
+  CLOSE_M = SLIDERS.close_by.default;
+  ONPREM_M = SLIDERS.on_premises.default;
+
+  // Cameras and cones live in memory so the radius slider can restyle
+  // them without a rebuild.
+  [CAMS, CONES] = await Promise.all([
+    fetch("data/cameras.geojson").then((r) => r.json()),
+    fetch("data/view_cones.geojson").then((r) => r.json()),
+  ]);
+  for (const f of CAMS.features) {
+    ALL_MATCHES[f.properties.camera_id] = JSON.parse(f.properties.matches || "[]");
+  }
+
+  await Promise.all(
+    Object.entries(PLACE_ICONS).map(([name, file]) => loadPlaceIcon(map, name, file))
+  );
+
+  updateStats();
+  document.getElementById("stats").title =
+    `Data built ${META.generated_at.slice(0, 10)}`;
+
+  // Two heuristic radii, both session-adjustable: "close by" for statutes
+  // with no distance at all, "on premises" for on-property language.
+  const wireSlider = (id, outId, cfg, onChange) => {
+    const el = document.getElementById(id);
+    el.min = cfg.min;
+    el.max = cfg.max;
+    el.step = cfg.step;
+    el.value = cfg.default;
+    document.getElementById(outId).textContent = `${cfg.default} m`;
+    el.addEventListener("input", () => {
+      document.getElementById(outId).textContent = `${el.value} m`;
+      onChange(Number(el.value));
+    });
+  };
+  wireSlider("buffer-slider", "buffer-value", SLIDERS.close_by,
+    (v) => applyBuffer(v, ONPREM_M));
+  wireSlider("onprem-slider", "onprem-value", SLIDERS.on_premises,
+    (v) => applyBuffer(CLOSE_M, v));
+
+  const cone = META.view_cone_heuristic || { half_angle_deg: 30, range_m: 60 };
+  document.getElementById("buffer-note").innerHTML =
+    `<p>Screening uses each statute's numeric distance when given. When a law ` +
+    `says only "close by" or "on the premises of", the adjustable radii above ` +
+    `stand in - always labeled in results, never a legal threshold.</p>` +
+    `<p>View cones (zoom ≥ 13) show mapped camera bearing with an illustrative ` +
+    `${cone.half_angle_deg * 2}° × ${cone.range_m} m spread; OSM records bearing ` +
+    `only, not true field of view.</p>` +
+    `<p>Camera points: OSM <code>surveillance:type=ALPR</code> (DeFlock convention). ` +
+    `Built ${META.generated_at.slice(0, 10)}.</p>`;
+
+  map.addSource("states", { type: "geojson", data: "data/states.geojson" });
+  map.addSource("cameras", { type: "geojson", data: CAMS });
+  map.addSource("places", { type: "geojson", data: "data/places.geojson" });
+  map.addSource("cones", { type: "geojson", data: CONES });
+
+  applyBuffer(CLOSE_M, ONPREM_M);
+
+  map.addLayer({
+    id: "state-fill",
+    type: "fill",
+    source: "states",
+    paint: {
+      "fill-color": [
+        "match", ["get", "law_status"],
+        "siting_law", COLORS.law,
+        COLORS.nolaw,
+      ],
+      "fill-opacity": [
+        "match", ["get", "law_status"],
+        "siting_law", 0.38,
+        0.22,
+      ],
+    },
+  });
+  map.addLayer({
+    id: "state-line",
+    type: "line",
+    source: "states",
+    paint: {
+      "line-color": [
+        "match", ["get", "law_status"],
+        "siting_law", "#5b21b6",
+        "#6b7280",
+      ],
+      "line-width": [
+        "match", ["get", "law_status"],
+        "siting_law", 1.8,
+        1.0,
+      ],
+    },
+  });
+
+  map.addLayer({
+    id: "places-pts",
+    type: "symbol",
+    source: "places",
+    minzoom: 10,
+    layout: {
+      "icon-image": [
+        "case",
+        ["==", ["get", "category"], "place_of_worship"],
+        ["match", ["coalesce", ["get", "religion"], ""],
+          "christian", "ff-worship-christian",
+          "muslim", "ff-worship-muslim",
+          "jewish", "ff-worship-jewish",
+          "ff-worship",
+        ],
+        ["match", ["get", "category"],
+          "school", "ff-school",
+          "healthcare_facility", "ff-health",
+          "courthouse", "ff-court",
+          "food_bank", "ff-food",
+          "ff-place",
+        ],
+      ],
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.45, 15, 0.7],
+      "icon-allow-overlap": true,
+    },
+  });
+
+  map.addLayer({
+    id: "view-cones",
+    type: "fill",
+    source: "cones",
+    minzoom: 13,
+    paint: {
+      "fill-color": [
+        "match", ["get", "status"],
+        "flagged", COLORS.flagged,
+        COLORS.clear,
+      ],
+      "fill-opacity": 0.18,
+      "fill-outline-color": "#555",
+    },
+  });
+
+  map.addLayer({
+    id: "cams-excluded",
+    type: "circle",
+    source: "cameras",
+    filter: ["==", ["get", "status"], "possible_exclusion"],
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 2.2, 12, 5],
+      "circle-color": COLORS.excluded,
+      "circle-opacity": 0.75,
+      "circle-stroke-width": 0.5,
+      "circle-stroke-color": "#4d3a12",
+    },
+  });
+  map.addLayer({
+    id: "cams-clear",
+    type: "circle",
+    source: "cameras",
+    filter: ["==", ["get", "status"], "checked_clear"],
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 2.2, 12, 5],
+      "circle-color": COLORS.clear,
+      "circle-opacity": 0.75,
+      "circle-stroke-width": 0.5,
+      "circle-stroke-color": "#123a63",
+    },
+  });
+  map.addLayer({
+    id: "cams-flagged",
+    type: "circle",
+    source: "cameras",
+    filter: ["==", ["get", "status"], "flagged"],
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 4, 12, 8],
+      "circle-color": COLORS.flagged,
+      "circle-opacity": 0.9,
+      "circle-stroke-width": 1.2,
+      "circle-stroke-color": "#5e0f0b",
+    },
+  });
+
+  for (const layer of ["cams-flagged", "cams-clear", "cams-excluded"]) {
+    map.on("click", layer, (e) => openDetail(e.features[0]));
+    map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
+    map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
+  }
+
+  // Hover tooltip while browsing nationally: state name + review status +
+  // when the law entry was last checked.
+  const stateTip = new maplibregl.Popup({
+    closeButton: false,
+    closeOnClick: false,
+    className: "state-tip",
+    maxWidth: "260px",
+  });
+  map.on("mousemove", "state-fill", (e) => {
+    if (map.getZoom() > 6.5) { stateTip.remove(); return; }
+    const p = e.features[0].properties;
+    const status = p.law_status === "siting_law"
+      ? "Camera-siting law in effect"
+      : "Reviewed, no siting law found";
+    const checked = p.last_verified
+      ? `<br><span class="pop-fine">Last checked ${esc(p.last_verified)}</span>`
+      : "";
+    stateTip
+      .setLngLat(e.lngLat)
+      .setHTML(`<b>${esc(p.name)}</b><br>${status}${checked}`)
+      .addTo(map);
+  });
+  map.on("mouseleave", "state-fill", () => stateTip.remove());
+
+  map.on("click", "state-fill", (e) => {
+    // State-status popups only while browsing nationally; suppress when
+    // zoomed in so empty clicks aren't spammy.
+    if (map.getZoom() > 6.5) return;
+    // Only when no camera was clicked on top
+    const cams = map.queryRenderedFeatures(e.point, {
+      layers: ["cams-flagged", "cams-clear", "cams-excluded"],
+    });
+    if (cams.length) return;
+    const p = e.features[0].properties;
+    const html = stateStatusHtml(p);
+    new maplibregl.Popup().setLngLat(e.lngLat).setHTML(html).addTo(map);
+  });
+
+  map.on("click", "places-pts", (e) => {
+    const cams = map.queryRenderedFeatures(e.point, {
+      layers: ["cams-flagged", "cams-clear", "cams-excluded"],
+    });
+    if (cams.length) return;
+    const p = e.features[0].properties;
+    const cat = CATEGORY_LABELS[p.category] || p.category;
+    const rel = p.religion && p.religion !== "null" ? ` (${p.religion})` : "";
+    new maplibregl.Popup()
+      .setLngLat(e.lngLat)
+      .setHTML(`<b>${esc(p.name)}</b><br>Protected category: ${esc(cat)}${esc(rel)}`)
+      .addTo(map);
+  });
+
+  // Zoom to rule states
+  const states = await (await fetch("data/states.geojson")).json();
+  const ruleFeats = states.features.filter(
+    (f) => f.properties.law_status === "siting_law"
+  );
+  if (ruleFeats.length) {
+    const b = new maplibregl.LngLatBounds();
+    for (const f of ruleFeats) extendBounds(b, f.geometry);
+    map.fitBounds(b, { padding: 60 });
+  }
+});
+
+function extendBounds(b, geom) {
+  const walk = (c) =>
+    typeof c[0] === "number" ? b.extend(c) : c.forEach(walk);
+  walk(geom.coordinates);
+}
+
+/* ------------------------ adjustable heuristic radius ------------------ */
+
+// Effective screening distance for one match: statutory number if the law
+// gives one; the "on premises" radius when the rule uses on-property
+// language; else the "close by" radius.
+function effectiveBuffer(m) {
+  if (m.buffer_specified) return m.buffer_m;
+  if (m.rule_heuristic_m) return ONPREM_M;
+  return CLOSE_M;
+}
+
+function applyBuffer(closeM, onpremM) {
+  CLOSE_M = closeM;
+  ONPREM_M = onpremM !== undefined ? onpremM : ONPREM_M;
+
+  const statusById = {};
+  for (const f of CAMS.features) {
+    const p = f.properties;
+    if (p.status !== "possible_exclusion") {
+      const within = (ALL_MATCHES[p.camera_id] || []).filter(
+        (m) => m.distance_m <= effectiveBuffer(m)
+      );
+      p.status = within.length ? "flagged" : "checked_clear";
+      p.match_count = within.length;
+      p.matches = JSON.stringify(within);
+    }
+    statusById[p.camera_id] = p.status;
+  }
+  for (const f of CONES.features) {
+    f.properties.status = statusById[f.properties.camera_id] || f.properties.status;
+  }
+  const camSrc = map.getSource("cameras");
+  const coneSrc = map.getSource("cones");
+  if (camSrc) camSrc.setData(CAMS);
+  if (coneSrc) coneSrc.setData(CONES);
+  updateStats();
+}
+
+function updateStats() {
+  const flagged = CAMS
+    ? CAMS.features.filter((f) => f.properties.status === "flagged").length
+    : META.flagged_count;
+  document.getElementById("stats").textContent =
+    `${flagged.toLocaleString()} flagged / ` +
+    `${META.camera_count.toLocaleString()} cameras · ${META.rule_states.join(", ")}`;
+}
+
+function stateStatusHtml(p) {
+  if (p.law_status === "siting_law") {
+    const rules = META.rules.filter((r) => r.state_code === p.state_code);
+    const names = [...new Set(rules.map((r) => r.statute_name))].join("; ");
+    return `<b>${esc(p.name)}</b><br>Siting law in effect: ${esc(names)}
+      ${p.last_verified ? `<br><span class="pop-fine">Last checked ${esc(p.last_verified)}</span>` : ""}`;
+  }
+  return `<b>${esc(p.name)}</b><br>Reviewed - no siting-specific ALPR law found.<br>
+    <span class="pop-fine">${esc(p.note || "")}
+    ${p.last_verified ? `Last checked ${esc(p.last_verified)}.` : ""}</span>`;
+}
+
+/* ------------------------------- detail panel ------------------------- */
+
+function openDetail(feature) {
+  const p = feature.properties;
+  const matches = JSON.parse(p.matches || "[]");
+  const coords = feature.geometry.coordinates;
+  const el = document.getElementById("detail-body");
+
+  let html = `
+    <h2>ALPR camera</h2>
+    <span class="status-badge ${p.status}">
+      ${p.status === "flagged" ? "⚑ Flagged for review"
+        : p.status === "possible_exclusion" ? "Possibly exempt device type"
+        : "Checked - nothing found"}
+    </span>
+    <div class="kv"><b>Location:</b> ${coords[1].toFixed(5)}, ${coords[0].toFixed(5)} (${esc(p.state_code)})</div>
+    ${p.operator ? `<div class="kv"><b>Operator:</b> ${esc(p.operator)}</div>` : ""}
+    ${p.brand ? `<div class="kv"><b>Brand:</b> ${esc(p.brand)}</div>` : ""}
+    ${p.direction ? `<div class="kv"><b>Facing:</b> ${esc(p.direction)}°</div>` : ""}
+    <div class="kv"><b>Source:</b> <a href="${esc(p.osm_url)}" target="_blank" rel="noopener">OpenStreetMap node</a> (crowdsourced)</div>
+  `;
+
+  if (p.status === "flagged") {
+    const exclRule = META.rules.find(
+      (r) => r.state_code === p.state_code && r.statutory_exclusions
+    );
+    html += `<h3>Why it's flagged</h3>`;
+    for (const m of matches) {
+      const rule = RULES_BY_ID[m.rule_id] || {};
+      html += `
+        <div class="match-card">
+          <div><span class="dist">${Math.round(m.distance_m)} m</span> from
+            <span class="place">${esc(m.place_name)}</span>
+            (${esc(CATEGORY_LABELS[m.place_category] || m.place_category)})
+            ${m.buffer_specified ? "" : `<span class="heuristic-tag">heuristic ${effectiveBuffer(m)} m - not a statutory distance</span>`}
+          </div>
+          ${m.buffer_specified || !rule.statutory_language ? "" : `
+          <div class="statute-quote">What the law actually says:
+            <span class="lang">${esc(rule.statutory_language)}</span></div>`}
+          <div class="cite">
+            ${esc(rule.statute_name || m.rule_id)} - ${esc(rule.statute_citation || "")}<br>
+            Effective ${esc(String(rule.effective_date || "?"))} ·
+            <a href="${esc(rule.source_url || "#")}" target="_blank" rel="noopener">statute source</a>
+          </div>
+        </div>`;
+    }
+    html += `
+      <div class="disclaimer">
+        Screening result - <b>not legal advice, not a violation determination</b>.
+        Verify the camera, the place, and the current statute text before reporting.
+        ${exclRule ? `<details><summary>Device-type exclusions</summary>${esc(exclRule.statutory_exclusions)}</details>` : ""}
+      </div>
+      <button class="report-btn" id="draft-report">✉ Draft a report / inquiry letter</button>
+      <div class="report-box hidden" id="report-box">
+        <textarea id="report-text" spellcheck="false" aria-label="Draft report letter, editable"></textarea>
+        <div class="report-actions">
+          <button id="copy-report">Copy to clipboard</button>
+          <button id="dl-report">Download .txt</button>
+        </div>
+      </div>`;
+  } else if (p.status === "possible_exclusion") {
+    html += `
+      <h3>Why it isn't flagged</h3>
+      <p>The mapped vendor (${esc(p.brand || "unknown")}) mainly makes camera types this
+      state's statute excludes from its ALPR definition (speed / school-bus / traffic
+      safety), so it was screened out to avoid a false positive.</p>
+      <p class="fine">Vendor tags are crowdsourced. If this is actually an ALPR, fix its
+      OSM tags via the source link above and the next build will check it.</p>`;
+  } else {
+    const stateRules = META.rules.filter((r) => r.state_code === p.state_code);
+    const cats = [...new Set(stateRules.map((r) => CATEGORY_LABELS[r.restricted_category] || r.restricted_category))];
+    html += `
+      <h3>What was checked</h3>
+      <p>This state has a siting law. No mapped ${esc(cats.join(", "))} was found within
+      the screened distance.</p>
+      <p class="fine">Mapped data is incomplete - absence of a flag is not a compliance
+      certification.</p>`;
+  }
+
+  el.innerHTML = html;
+  document.getElementById("detail").classList.remove("hidden");
+
+  const btn = document.getElementById("draft-report");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      const box = document.getElementById("report-box");
+      box.classList.remove("hidden");
+      document.getElementById("report-text").value = draftReport(p, coords, matches);
+      box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    document.getElementById("copy-report")?.addEventListener("click", async (ev) => {
+      await navigator.clipboard.writeText(document.getElementById("report-text").value);
+      ev.target.textContent = "Copied ✓";
+      setTimeout(() => (ev.target.textContent = "Copy to clipboard"), 1500);
+    });
+    document.getElementById("dl-report")?.addEventListener("click", () => {
+      const blob = new Blob([document.getElementById("report-text").value], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `alpr-siting-inquiry-${p.camera_id}.txt`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  }
+}
+
+function draftReport(p, coords, matches) {
+  const m = matches[0];
+  const rule = RULES_BY_ID[m.rule_id] || {};
+  const lines = [
+    "[DRAFT - starting point only. Not legal advice. Replace all bracketed",
+    " fields, and independently verify every fact below before sending.]",
+    "",
+    "To: [Agency / city council / police department public records officer]",
+    "Subject: Inquiry regarding ALPR camera placement near a protected location",
+    "",
+    "Dear [Name/Office],",
+    "",
+    "I am writing regarding an automated license plate reader (ALPR) camera",
+    `located at approximately ${coords[1].toFixed(5)}, ${coords[0].toFixed(5)}` +
+      (p.operator ? ` (operator recorded as: ${p.operator})` : "") + ".",
+    "",
+    "Publicly available, crowdsourced map data indicates this camera is",
+    `approximately ${Math.round(m.distance_m)} meters from ${m.place_name},`,
+    `a ${CATEGORY_LABELS[m.place_category] || m.place_category}.`,
+    "",
+    `${rule.statute_name || "State law"} (${rule.statute_citation || "citation"},`,
+    `effective ${rule.effective_date || "[date]"}) restricts the placement of ALPR`,
+    `equipment on or near locations of this kind.`,
+  ];
+  if (!m.buffer_specified) {
+    lines.push(
+      "",
+      "Note: the statute does not specify a numeric distance; the",
+      `${effectiveBuffer(m)}-meter figure above is a proximity estimate used for screening,`,
+      "not a statutory threshold. The relevant statutory language is:",
+      `  ${rule.statutory_language || "[quote the statute's placement language here]"}`,
+      "I raise this for your review of whether the placement complies with",
+      "that language."
+    );
+  }
+  if (rule.statutory_exclusions) {
+    lines.push(
+      "",
+      "I acknowledge the statute excludes certain device types (school bus",
+      "safety, speed safety, and automated traffic safety camera systems) from",
+      "its ALPR definition. If this device falls within one of those exclusions,",
+      "I would appreciate confirmation of that classification."
+    );
+  }
+  lines.push(
+    "",
+    "I respectfully request:",
+    "  1. Confirmation of whether this camera is operated by or on behalf of",
+    "     your agency;",
+    "  2. Records sufficient to show its installation date, exact location, and",
+    "     any siting/compliance review performed under the statute above;",
+    "  3. If the placement is found inconsistent with the statute, information",
+    "     on the process and timeline for relocation or removal.",
+    "",
+    "This request is made in good faith based on public data that I understand",
+    "may be incomplete or out of date; I welcome any correction.",
+    "",
+    "Sincerely,",
+    "[Your name]",
+    "[Your contact information]",
+    "",
+    "---",
+    `Generated by ALPR Siting Compliance Map on ${new Date().toISOString().slice(0, 10)}.`,
+    `Camera source: ${p.osm_url} (© OpenStreetMap contributors).`,
+    `Statute source: ${rule.source_url || "[verify]"}.`
+  );
+  return lines.join("\n");
+}
+
+/* ---------------------------------- misc ------------------------------ */
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+}
+
+document.getElementById("detail-close").addEventListener("click", () =>
+  document.getElementById("detail").classList.add("hidden")
+);
+document.getElementById("about-btn").addEventListener("click", () =>
+  document.getElementById("about").classList.remove("hidden")
+);
+document.querySelector("#about .modal-close").addEventListener("click", () =>
+  document.getElementById("about").classList.add("hidden")
+);
+document.getElementById("about").addEventListener("click", (e) => {
+  if (e.target.id === "about") e.target.classList.add("hidden");
+});
+
+/* Test hook: lets the a11y suite render the detail panel deterministically. */
+window.__ff = { openDetail, applyBuffer, map, get cams() { return CAMS; } };

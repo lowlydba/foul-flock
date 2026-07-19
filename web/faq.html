@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<!-- don't worry, no trackers here :) -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>How &amp; why · Foul Flock</title>
+  <meta name="description" content="Plain-English guide to the Foul Flock ALPR siting compliance map: what it does, how to use it, and what it can't tell you." />
+  <meta name="color-scheme" content="light dark" />
+  <link rel="canonical" href="https://www.foulflock.com/faq.html" />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <meta property="og:title" content="How &amp; why · Foul Flock" />
+  <meta property="og:description" content="Plain-English guide to the Foul Flock ALPR siting compliance map." />
+  <meta property="og:url" content="https://www.foulflock.com/faq.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://www.foulflock.com/assets/og-image.png" />
+  <link rel="stylesheet" href="assets/pico.classless.min.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="page">
+  <main>
+  <a class="backlink" href="index.html">&larr; Back to the map</a>
+
+  <header>
+    <h1>How &amp; why</h1>
+    <p class="tagline">A plain-English guide to Foul Flock.</p>
+  </header>
+
+  <h2>What is this?</h2>
+  <p>Automated license plate readers (ALPRs) photograph every passing car and
+  log where it was. A few states have passed laws about <em>where</em> these
+  cameras may be placed - near schools or places of worship, for example.
+  This map takes crowdsourced camera locations and checks them against those
+  placement laws, so you can see which cameras deserve a closer look.</p>
+
+  <h2>Why does it exist?</h2>
+  <p>Placement laws only matter if someone checks. Agencies rarely audit
+  their own cameras against siting statutes, and doing it by hand means
+  reading statutes and measuring distances one camera at a time. This tool
+  does the tedious part, leaving the part that actually matters to you:
+  verification and follow-up.</p>
+
+  <h2>How do I use it?</h2>
+  <ol>
+    <li>Purple states have a placement (siting) law. Zoom into one.</li>
+    <li>Red dots are cameras flagged as close to a protected place; blue dots
+        were checked and nothing was found. Orange icons are the protected
+        places themselves (schools, worship, healthcare, courts, food banks).</li>
+    <li>Click a red dot to see the distance, the statute, and what the law
+        actually says.</li>
+    <li>If it still looks off after you verify the facts yourself, use
+        "Draft a report" to generate a starting-point inquiry letter to the
+        relevant agency.</li>
+  </ol>
+
+  <h2>What do the radius sliders do?</h2>
+  <p>Some statutes say things like "immediately surrounding" without giving
+  a number. Rather than pretend we know what a court would say, the map uses
+  an adjustable "close by" radius (default 100 m) and labels every result
+  that relies on it. Where a statute uses on-property language instead (like
+  Virginia's "on or within the boundaries of"), a tighter "on premises"
+  radius applies (default 50 m). Both live in the legend. Neither is a legal
+  threshold. Statutes that state an actual number ignore the sliders
+  entirely.</p>
+
+  <h2>Is this legal advice?</h2>
+  <p><strong>No.</strong> Camera positions and place categories are
+  crowdsourced and can be wrong, stale, or mis-tagged; statutes change; and
+  whether a specific placement violates a specific law is a question for a
+  lawyer, not a map. Verify everything yourself - the camera, the place, and
+  the current statute text - before contacting anyone.</p>
+
+  <h2>Where does the data come from?</h2>
+  <p>Camera locations come from
+  <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a>
+  using the <a href="https://deflock.me" target="_blank" rel="noopener">DeFlock</a>
+  tagging convention (<code>surveillance:type=ALPR</code>). Protected places
+  and state boundaries come from
+  <a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps</a>.
+  The law table is hand-curated with citations and source links on every
+  rule.</p>
+
+  <h2>A camera or place is wrong. How do I fix it?</h2>
+  <p>Cameras: every camera's detail panel links to its OpenStreetMap node;
+  correct the tags there and the next data build picks it up. Places come
+  from Overture Maps, which blends several sources, so a wrong place is
+  best reported as an issue on
+  <a href="https://github.com/lowlydba/foul-flock" target="_blank" rel="noopener">GitHub</a>.
+  If a <em>law</em> is wrong or missing, open an issue too, with a link to
+  the statute.</p>
+
+  <h2>Why isn't my state highlighted?</h2>
+  <p>Purple states have a siting law. Gray states were reviewed and have no
+  siting-specific ALPR law (many regulate only data retention or use). Hover
+  over any state to see when it was last checked. A state with no shading at
+  all has not been reviewed.</p>
+
+  <footer>
+    Static site; no tracking, no backend. Camera data &copy; OpenStreetMap
+    contributors (ODbL). Protected places and state boundaries &copy;
+    <a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps Foundation</a>.
+    Made by
+    <a href="https://github.com/lowlydba" target="_blank" rel="noopener">lowlydba</a>.
+  </footer>
+  </main>
+</body>
+</html>

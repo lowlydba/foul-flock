@@ -1,0 +1,635 @@
+Agent completed. agent_id: alpr-law-research, agent_type: research, status: completed, description: Research state ALPR siting laws, elapsed: 886s, total_turns: 0, duration: 875s
+
+I now have comprehensive data for all 43 states + DC. Here is the full research output:
+
+---
+
+## Research Summary
+
+After consulting the LAPPA September 2025 50-state PDF summary, Stateline's October 2025 article, unflocked.org, obscureiq.com, recordinglaw.com, and directly reading primary statute texts for Idaho (§ 49-1432), Montana (MCA § 46-5-117), Vermont (23 V.S.A. § 1607), Florida (§ 316.0777), Tennessee (§ 55-10-302), Minnesota (§ 13.824), and Illinois (625 ILCS 5/2-130), I find:
+
+**No state among the 43 remaining has a statute specifically restricting ALPR siting/placement near schools, worship, healthcare, courthouses, food banks, or other protected-location categories.** Washington (SB 6002, already handled) is, as of July 2026, the only state with such a siting law. 13 of the 43 states have some ALPR statute addressing use, retention, or data sharing. 31 states/DC have no ALPR-specific statute at all (including several with pending bills). Several new 2026 laws (Connecticut PA 26-14, New Jersey A4070) are recent but focus on data use/sharing, not siting.
+
+---
+
+```yaml
+# ALPR Siting Compliance Map - State Law Survey
+# Research date: 2026-07-18
+# Scope: 43 states + DC not previously reviewed
+# Siting law = statute restricting physical placement/installation near protected location categories
+# Sources: LAPPA Sept 2025 PDF, Stateline Oct 2025, unflocked.org, obscureiq.com,
+#          recordinglaw.com July 2026, primary statute texts where retrieved
+
+- state_code: AL
+  verdict: no_alpr_statute
+  note: >
+    No enacted statutory law. Alabama Criminal Justice Information Center issued
+    administrative rules (Ala. Admin. Code r. 265-X-6-.01 et seq., eff. March 17, 2022)
+    covering ALPR use, retention, registry, and audits for LE agencies - but these are
+    agency regulations, not a legislative statute. No siting restrictions in either source.
+  confidence: inferred (secondary sources; admin code text not read)
+  sources:
+    - https://www.law.cornell.edu/regulations/alabama/Ala-Admin-Code-r-265-X-6-.01
+    - https://regulations.justia.com/states/alabama/title-265/chapter-265-x-6/
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: AK
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute found; confirmed by LAPPA Sept 2025 survey and
+    obscureiq.com 2026 map. General surveillance and privacy laws apply by default.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+
+- state_code: AZ
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey. Local agency
+    policies govern use.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+
+- state_code: AR
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: Ark. Code Ann. §§ 12-12-1801 to 12-12-1808 ("Automatic License
+    Plate Reader System Act"), originally enacted Act 1491 (2013), significantly amended
+    by Act 668 / SB 446 (signed April 2025, 95th General Assembly). 2025 amendment
+    expanded authorized users to include private landowners and commercial businesses
+    (data must be deleted after 60 days); state agencies/parking enforcement may retain
+    up to 150 days. Focus is on permissible users and retention limits only - no
+    restrictions on physical placement or siting near protected locations.
+  confidence: inferred (secondary sources; statute text not directly read)
+  sources:
+    - https://arkleg.state.ar.us/Bills/Detail?id=SB446&ddBienniumSession=2025%2F2025R
+    - https://arkleg.state.ar.us/Home/FTPDocument?path=%2FACTS%2F2025R%2FPublic%2FACT668.pdf
+    - https://law.justia.com/codes/arkansas/title-12/subtitle-2/chapter-12/subchapter-18/section-12-12-1801/
+    - https://stateline.org/2025/10/10/despite-widespread-interest-only-3-states-passed-license-plate-reader-laws-this-year/
+
+- state_code: CO
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. C.R.S. § 24-72-113 (enacted 2010, still current) limits
+    retention of all government "passive surveillance records" - a category that CDOT
+    guidance explicitly includes ALPR imagery - to 3 years, with access restrictions
+    after year 1. This is a general surveillance records law, not an ALPR-specific
+    statute. SB 26-070 (2026), which would have required warrants for ALPR database
+    access and imposed 30-day retention, was deemed lost by the Senate on Second
+    Reading on April 29, 2026 - not enacted.
+  confidence: inferred (secondary sources; § 24-72-113 text confirmed via secondary description)
+  sources:
+    - https://colorado.public.law/statutes/crs_24-72-113
+    - https://law.justia.com/codes/colorado/2023/title-24/public/article-72/part-1/section-24-72-113/
+    - https://leg.colorado.gov/bills/SB26-070
+    - https://www.codot.gov/business/permits/utilitiesspecialuse/assets/alpr-evaluation-and-checklist-october-2023-1-_accessible.pdf
+
+- state_code: CT
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: Connecticut Public Act 26-14 (SB 397 / HB 5449), passed 2026
+    session, effective October 1, 2026. Sets 30-day default retention limit, prohibits
+    use for immigration enforcement, monitoring based on race/religion/First Amendment
+    activity, or tracking those seeking reproductive or gender-affirming healthcare.
+    Mandates written agency ALPR policies, annual audits, and data-sharing attestation
+    requirements. No restrictions on physical placement or siting near protected
+    location categories.
+  confidence: inferred (secondary sources; bill text not directly read)
+  sources:
+    - https://legiscan.com/CT/bill/SB00397/2026
+    - https://legiscan.com/CT/bill/HB05449/2026
+    - https://ctmirror.org/2026/03/10/bill-constraining-use-of-license-plate-data-gets-broad-support/
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: DE
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and obscureiq 2026.
+    Agency-level policies govern use.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+
+- state_code: DC
+  verdict: no_alpr_statute
+  note: >
+    No enacted ALPR statute. DC Code §§ 50-2209.01–50-2209.11 covers automated
+    traffic enforcement (speed/red-light cameras) but not ALPR surveillance. MPD
+    operates on an internal policy of 30-day on-board / 90-day central-server retention.
+    The DC Police Complaints Board flagged lack of statutory protections in a 2020
+    report. No council-enacted ALPR ordinance found as of July 2026. No siting
+    restrictions.
+  confidence: inferred (secondary sources; DC Code citation confirmed)
+  sources:
+    - https://policecomplaints.dc.gov/publication/automated-license-plate-readers
+    - https://code.dccouncil.gov/us/dc/council/code/titles/50/chapters/22/subchapters/V
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: FL
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: Fla. Stat. § 316.0777 (current, last updated per FDOT 2024).
+    Allows ALPR installation within FDOT state highway right-of-way at law enforcement
+    request, at sole expense of the requesting LE agency, removable within 30 days
+    on FDOT notice; prohibits use for traffic-infraction citations; classifies ALPR
+    images/data as confidential and exempt from public records law; retention governed
+    by schedule set under § 316.0778. This is a right-of-way permitting and data
+    confidentiality statute. No restrictions on placement near schools, worship sites,
+    healthcare facilities, or other protected location categories.
+  confidence: verified (§ 316.0777 text read directly)
+  sources:
+    - https://www.leg.state.fl.us/Statutes/index.cfm?App_mode=Display_Statute&URL=0300-0399/0316/Sections/0316.0777.html
+    - https://www.fdot.gov/traffic/trafficservices/lpr
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: GA
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute in O.C.G.A. Georgia DOT issues administrative permits for
+    ALPR placement on state right-of-way (operational/infrastructure permits), but no
+    privacy or data-focused ALPR statute exists. Georgia is home state of Flock Safety;
+    among the most heavily deployed states with no statutory protections.
+  confidence: inferred (secondary sources; O.C.G.A. search confirmed no ALPR chapter)
+  sources:
+    - https://www.dot.ga.gov/GDOT/Pages/ALPR.aspx
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: HI
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey. No siting
+    restrictions.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+
+- state_code: ID
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: Idaho Code § 49-1432 (enacted by S1180, Ch. 316, signed
+    April 4, 2025, effective July 1, 2025). Restricts agency ALPR use to: felony/
+    misdemeanor investigations, traffic accident investigations, missing/endangered
+    persons searches, and real-time traffic flow analysis. Prohibits use for traffic
+    infractions (except accident-related), personal use, political activity, or
+    non-LE surveillance. Requires access controls, mandatory training, secure audit
+    logs, and semi-annual audits. No restrictions on physical placement or siting
+    near protected location categories.
+  confidence: verified (§ 49-1432 text read directly)
+  sources:
+    - https://law.justia.com/codes/idaho/title-49/chapter-14/section-49-1432/
+    - https://legislature.idaho.gov/sessioninfo/2025/legislation/S1180/
+    - https://stateline.org/2025/10/10/despite-widespread-interest-only-3-states-passed-license-plate-reader-laws-this-year/
+
+- state_code: IL
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: 625 ILCS 5/2-130, enacted by Public Act 103-540 (eff. January 1,
+    2024). Prohibits any ALPR user (including LE) from sharing ALPR data with out-of-state
+    LE agencies unless that agency provides written certification the data will not be used
+    for immigration enforcement or reproductive health care investigations. Data must be
+    held confidentially. Notable context: 2025 audits found CBP accessed Illinois ALPR
+    data in violation of this statute, triggering enforcement action. No restrictions on
+    physical placement or siting near protected location categories.
+  confidence: verified (625 ILCS 5/2-130 text partially read; subsections (c)–(e) confirmed)
+  sources:
+    - https://www.ilga.gov/Documents/legislation/ilcs/documents/062500050K2-130.htm
+    - https://www.recordinglaw.com/us-laws/automated-license-plate-readers/
+    - https://stateline.org/2025/10/10/despite-widespread-interest-only-3-states-passed-license-plate-reader-laws-this-year/
+
+- state_code: IN
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Rapid Flock Safety deployment in Indianapolis,
+    Fishers, Muncie, Gary with no state statutory framework. Agency policies govern.
+  confidence: inferred (secondary sources; IU law review and LAPPA confirmed)
+  sources:
+    - https://mckinneylaw.iu.edu/practice/law-reviews/ilr/pdf/vol58p449.pdf
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: IA
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. ACLU Iowa documented widespread LE deployment with
+    no binding state-level statute as of 2025. Agency policies govern.
+  confidence: inferred (secondary sources including ACLU-IA report)
+  sources:
+    - https://www.aclu-ia.org/publications/automatic-license-plate-reader-report-raises-concerns-about-expansion-of-government-surveillance-in-iowa/
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: KS
+  verdict: no_alpr_statute
+  note: >
+    No ALPR statute. SB 305 (2021) would have regulated collection, use, and storage
+    of ALPR data but did not become law. Kansas Legislative Research Dept documented
+    documented abuse cases. Agency policies and MOUs govern retention (typically 6
+    months). No siting restrictions.
+  confidence: inferred (secondary sources; KLRD publication confirmed)
+  sources:
+    - https://klrd.gov/publications/automated-license-plate-readers/
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+
+- state_code: KY
+  verdict: no_alpr_statute
+  note: >
+    No enacted ALPR statute. SB 185 (2025 session) would have limited use to LE/public
+    safety, set 90-day retention, prohibited data sale, required written policies - but
+    was referred to Senate Judiciary Committee and did not advance. HB 20 (2025) also
+    introduced; neither enacted. No siting restrictions in either bill.
+  confidence: inferred (secondary sources; bill tracking confirmed)
+  sources:
+    - https://apps.legislature.ky.gov/record/25RS/SB185.html
+    - https://apps.legislature.ky.gov/record/25RS/hb20.html
+    - https://stateline.org/2025/10/10/despite-widespread-interest-only-3-states-passed-license-plate-reader-laws-this-year/
+
+- state_code: LA
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Agency-level policies govern. Confirmed by LAPPA Sept
+    2025 survey. No siting restrictions.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+
+- state_code: MD
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: Md. Code, Public Safety § 3-509, as amended by HB 1081 / SB 840
+    (enacted 2024, effective October 1, 2024). Prohibits LE agencies and their contracted
+    vendors from selling ALPR data or licensing/subscribing access to it. Vendors may
+    not access stored ALPR data without express LE agency authorization. Data cannot be
+    uploaded to any outside agency except the Maryland Coordination and Analysis Center
+    (MCAC). Mandates audits and breach notification. No restrictions on physical
+    placement or siting near protected location categories.
+  confidence: inferred (secondary sources; statute text confirmed via secondary description)
+  sources:
+    - https://legiscan.com/MD/bill/HB1081/2024
+    - https://blog.tenthamendmentcenter.com/2024/05/signed-as-law-maryland-places-limits-on-alpr-data-sharing/
+    - https://mgaleg.maryland.gov/2024RS/fnotes/bil_0001/hb1081.pdf
+
+- state_code: MA
+  verdict: no_alpr_statute
+  note: >
+    No enacted ALPR statute. H.3755 (194th General Court, 2025–26), "An Act Establishing
+    Driver Privacy Protections," was favorably reported by committee and referred to
+    House Ways & Means as of March 23, 2026; not enacted as of July 2026. H.3755
+    would set 14-day retention, warrant requirement, and prohibit First Amendment-based
+    monitoring - no siting restrictions. The SJC in Commonwealth v. McCarthy, 484 Mass.
+    493 (2020) signaled mosaic theory under Art. 14 but did not create a statute.
+  confidence: inferred (secondary sources; bill tracking confirmed)
+  sources:
+    - https://malegislature.gov/Bills/194/H3755.Html
+    - https://legiscan.com/MA/bill/H3755/2025
+    - https://malegislature.gov/Bills/194/H3755.pdf
+
+- state_code: MI
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Significant Flock deployment in metro Detroit, Grand
+    Rapids, and Lansing with no statutory protections as of 2025. Confirmed by LAPPA
+    Sept 2025 survey and unflocked.org.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://unflocked.org/state-laws
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: MN
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: Minn. Stat. § 13.824 (enacted 2015, amended; Data Practices Act
+    chapter) + § 626.8472 (policy requirement). § 13.824 classifies ALPR data as private/
+    nonpublic, limits data collection to plate number + date/time/location + photos,
+    requires destruction within 60 days if not tied to active criminal investigation,
+    requires a warrant for tracking during an active investigation, mandates public logs
+    and biennial audits. § 626.8472 requires agencies to adopt written ALPR policies.
+    No restrictions on physical placement or siting near protected location categories.
+  confidence: verified (§ 13.824 text read directly; §626.8472 confirmed via secondary)
+  sources:
+    - https://www.revisor.mn.gov/statutes/cite/13.824
+    - https://law.justia.com/codes/minnesota/chapters-13-13c/chapter-13/section-13-824/
+    - https://law.justia.com/codes/minnesota/chapters-625-634/chapter-626/section-626-8472/
+
+- state_code: MS
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and obscureiq 2026.
+    Agency policies govern.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+
+- state_code: MO
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. HB 658 (2025) introduced but did not advance. Confirmed
+    by LAPPA Sept 2025 and stateline.org Oct 2025.
+  confidence: inferred (secondary sources; bill tracking confirmed)
+  sources:
+    - https://house.mo.gov/Bill.aspx?bill=HB658&year=2025&code=R
+    - https://stateline.org/2025/10/10/despite-widespread-interest-only-3-states-passed-license-plate-reader-laws-this-year/
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: MT
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: Mont. Code Ann. § 46-5-117 (enacted via SB 344, signed May 8,
+    2023; "Revise license plate laws"). Imposes near-prohibition on government ALPR use
+    on public highways; exceptions include DOT for planning (data anonymized), DOT/cities
+    for regulated parking enforcement, DOT for commercial truck screening, and LE agencies
+    that: (a) adopt and publicly post a written ALPR policy addressing database use,
+    retention, sharing, training, oversight, and access security; (b) conduct annual
+    audits; (c) use ALPR only for official LE purposes (stolen vehicles, wanted/missing
+    persons, outstanding warrants, trucking violations, case-specific criminal
+    investigative surveillance, major crimes, or vehicles in vicinity of recent crime);
+    and (d) do not treat a positive match alone as reasonable suspicion for a stop.
+    No restrictions on physical siting near schools, worship, or healthcare facilities.
+    CAUTION: unflocked.org characterizes MT as requiring a warrant; the actual statute
+    text requires articulable law enforcement purpose with specific use categories - not
+    a warrant per se - so the unflocked description overstates the restriction.
+  confidence: verified (MCA § 46-5-117 text read directly; enactment year inferred from SB 344 2023)
+  sources:
+    - https://mca.legmt.gov/bills/mca/title_0460/chapter_0050/part_0010/section_0170/0460-0050-0010-0170.html
+    - https://apps.montanafreepress.org/capitol-tracker-2023/bills/sb-344/
+    - https://unflocked.org/state-laws
+
+- state_code: NE
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: Neb. Rev. Stat. §§ 60-3201 to 60-3209 ("Automatic License Plate
+    Reader Privacy Act," enacted 2018). Limits retention to 180 days unless flagged as
+    evidence in a criminal proceeding. ALPR data is not a public record; disclosure
+    requires court order or law enforcement purpose. Annual public reporting required.
+    Applies to both stationary and mobile systems. No restrictions on physical placement
+    or siting near protected location categories.
+  confidence: inferred (secondary sources confirmed; statute text not directly read)
+  sources:
+    - https://ncc.nebraska.gov/automatic-license-plate-reader-resources
+    - https://statepatrol.nebraska.gov/sites/default/files/05-24_automatic_license_plate_reader_0.pdf
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: NV
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey. Agency policies govern.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+
+- state_code: NJ
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: New Jersey Privacy Protection Act (A4070 / S4070), enacted and
+    signed March 25, 2026. Prohibits government entities from selling, sharing, or
+    transferring ALPR data except to LE agencies for lawful purposes; bars sharing for
+    civil immigration enforcement; requires out-of-state agencies to certify data won't
+    be used for immigration enforcement. Data exempt from OPRA public records requests.
+    Prior to this, only NJ AG Directive 2022-12 (administrative guidance, not statute)
+    governed ALPR data (5-year then 3-year retention, security requirements). No
+    restrictions on physical placement or siting near protected location categories
+    in either instrument.
+  confidence: inferred (secondary sources; bill tracking confirmed; full statutory text not read)
+  sources:
+    - https://www.billtrack50.com/billdetail/1969033
+    - https://www.flocksafety.com/blog/does-new-jerseys-privacy-protection-act-affect-alpr-data-sharing-across-state-lines
+    - https://www.nj.gov/oag/dcj/agguide/directives/ag-Directive-2022-12_Updated-Directive-Regulating-Use-of-Automated-License-Plate-Recognition-(ALPR)-Technology.pdf
+
+- state_code: NM
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. HB 127 (2025 session) introduced but did not advance
+    (confirmed by Stateline Oct 2025). Confirmed by LAPPA Sept 2025.
+  confidence: inferred (secondary sources; bill tracking confirmed)
+  sources:
+    - https://www.nmlegis.gov/Legislation/Legislation?chamber=H&legType=B&legNo=127&year=25
+    - https://stateline.org/2025/10/10/despite-widespread-interest-only-3-states-passed-license-plate-reader-laws-this-year/
+
+- state_code: NY
+  verdict: no_alpr_statute
+  note: >
+    No enacted ALPR statute. Bills requiring minimum ALPR policy standards and mandatory
+    posting (A4157/S3165 in 2023–24; S963/A907 in 2025–26) have passed the Assembly
+    repeatedly but died in the Senate. A4157 passed Assembly March 23, 2023; "died in
+    senate" per NY Senate records. S963/A907 remain active in 2025–26 session. None of
+    these bills address physical siting.
+  confidence: verified (NY Senate bill page A4157 read directly, confirmed died in Senate)
+  sources:
+    - https://www.nysenate.gov/legislation/bills/2023/A4157
+    - https://www.nysenate.gov/legislation/bills/2025/S963
+    - https://legiscan.com/NY/text/S00963/id/3040391
+
+- state_code: ND
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and obscureiq 2026.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+
+- state_code: OH
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and obscureiq 2026.
+    General surveillance laws apply.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+
+- state_code: OK
+  verdict: no_alpr_statute
+  note: >
+    No enacted ALPR statute. SB 857 (2025) introduced but did not advance (confirmed
+    by Stateline Oct 2025). No siting restrictions in the failed bill.
+  confidence: inferred (secondary sources; bill tracking confirmed)
+  sources:
+    - https://www.oklegislature.gov/BillInfo.aspx?Bill=sb857&Session=2500
+    - https://stateline.org/2025/10/10/despite-widespread-interest-only-3-states-passed-license-plate-reader-laws-this-year/
+
+- state_code: PA
+  verdict: no_alpr_statute
+  note: >
+    No enacted ALPR statute. SB 933 (2025–26 session, sponsors Picozzi et al.) would
+    provide for ALPR systems under Title 75 (Vehicles); referred to Transportation
+    Committee July 14, 2025; status pending as of research date. The bill outlines a
+    permitting process for agencies but does not restrict siting near protected location
+    categories. Not enacted.
+  confidence: inferred (PA legislation page read; secondary sources on bill content)
+  sources:
+    - https://www.palegis.us/legislation/bills/2025/sb933
+    - https://stateline.org/2025/10/10/despite-widespread-interest-only-3-states-passed-license-plate-reader-laws-this-year/
+
+- state_code: RI
+  verdict: no_alpr_statute
+  note: >
+    No enacted ALPR statute. H5659 (2025 session) introduced but did not advance
+    (confirmed by Stateline Oct 2025). No siting restrictions in the failed bill.
+  confidence: inferred (secondary sources; bill tracking confirmed)
+  sources:
+    - https://legiscan.com/RI/text/H5659/id/3143293
+    - https://stateline.org/2025/10/10/despite-widespread-interest-only-3-states-passed-license-plate-reader-laws-this-year/
+
+- state_code: SC
+  verdict: no_alpr_statute
+  note: >
+    No enacted ALPR statute. H.3374 (2023–24) and H.4013 (2025–26) introduced provisions
+    on permitted entities, DOT permit for non-interstate ROW placement, and retention -
+    but neither has been enacted. H.4013 remains pending in 2025–26 session. A 2025
+    SC state court affirmed SLED has statutory authority to operate ALPR systems under
+    existing law, permitting up to 1 year of data storage. S3155 (2025) also introduced
+    but not enacted.
+  confidence: inferred (secondary sources; bill tracking and court decision confirmed)
+  sources:
+    - https://www.scstatehouse.gov/sess126_2025-2026/bills/4013.htm
+    - https://legiscan.com/SC/bill/H4013/2025
+    - https://www.scpif.org/sleds-automatic-license-plate-readers-still-allowed-by-a-south-carolina-judge/
+
+- state_code: SD
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and obscureiq 2026.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+
+- state_code: TN
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: Tenn. Code Ann. § 55-10-302 (enacted by 2014 Acts ch. 625,
+    effective July 1, 2014). Prohibits any governmental entity from storing "captured
+    plate data" (GPS, date/time, photo, plate number) for more than 90 days unless the
+    data is retained as part of an ongoing criminal investigation; at investigation
+    conclusion (no charges filed, or after criminal action), data must be destroyed.
+    Applies to fixed cameras only (definition: "one or more fixed high-speed cameras").
+    No restrictions on physical placement or siting near protected location categories.
+  confidence: verified (§ 55-10-302 text read directly from Justia)
+  sources:
+    - https://law.justia.com/codes/tennessee/title-55/chapter-10/part-3/section-55-10-302/
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: TX
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. HB 2083 (89th Legislature, 2025) introduced restrictions
+    on governmental entity ALPR use but died in Homeland Security, Public Safety &
+    Veterans' Affairs Committee March 2025 without a vote. Major deployment state
+    (Dallas, Houston, San Antonio, Austin have extensive Flock networks) with no
+    state-level protections. No siting restrictions.
+  confidence: inferred (secondary sources; bill tracking confirmed)
+  sources:
+    - https://capitol.texas.gov/BillLookup/History.aspx?LegSess=89R&Bill=HB2083
+    - https://legiscan.com/TX/bill/HB2083/2025
+    - https://stateline.org/2025/10/10/despite-widespread-interest-only-3-states-passed-license-plate-reader-laws-this-year/
+
+- state_code: UT
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: Utah Code Ann. §§ 41-6a-2001 to 41-6a-2006 ("Automatic License
+    Plate Reader System Act," enacted 2013, amended by Ch. 251, 2024 General Session).
+    Limits ALPR use to official LE business (active criminal investigations, stolen
+    vehicle recovery, fugitive/missing person apprehension). Retention limited to 9
+    months maximum. Quarterly audits and annual reports to State Commission on Criminal
+    and Juvenile Justice required. Stationary ALPRs along state highways require a
+    UDOT special use permit (analogous to ROW permitting, not a proximity restriction
+    on protected locations). No restrictions on physical siting near schools, worship,
+    or healthcare facilities. HB 468 (2025) proposing expanded reporting/auditing
+    requirements did not appear to advance.
+  confidence: inferred (secondary sources; statute structure confirmed via multiple sources)
+  sources:
+    - https://le.utah.gov/xcode/Title41/Chapter6A/41-6a-P20.html
+    - https://www.lawserver.com/law/state/utah/ut-code/utah_code_title_41_chapter_6a_part_20
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: VT
+  verdict: no_siting_law
+  note: >
+    Has ALPR statute: 23 V.S.A. § 1607 (enacted 2013 No. 69, most recently amended
+    by 2023 No. 135 (Adj. Sess.) § 1a, effective July 1, 2025). Requires ALPR
+    operators to be certified by Vermont Criminal Justice Council. Restricts active
+    data access to legitimate LE purposes only, within prior 7 days. Historical data
+    (up to 6 months) requires written request with specific articulable facts showing
+    relevance to ongoing criminal/missing-person/commercial vehicle investigation.
+    Data older than 6 months requires a judicial warrant. All ALPR data retained 18
+    months maximum, then destroyed. Annual reporting to legislature on system use,
+    costs, and alert outcomes. No restrictions on physical placement or siting near
+    protected location categories.
+  confidence: verified (§ 1607 text read directly from VT Legislature website)
+  sources:
+    - https://legislature.vermont.gov/statutes/section/23/015/01607
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: WV
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and obscureiq 2026.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+
+- state_code: WI
+  verdict: no_alpr_statute
+  note: >
+    No enacted ALPR statute. ACLU Wisconsin documented multiple abuse cases in 2025;
+    legislative proposals introduced but not passed as of 2026. Confirmed by unflocked.org
+    and LAPPA survey.
+  confidence: inferred (secondary sources; ACLU WI reporting noted)
+  sources:
+    - https://unflocked.org/state-laws
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+
+- state_code: WY
+  verdict: no_alpr_statute
+  note: >
+    No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and obscureiq 2026.
+  confidence: inferred (secondary sources only)
+  sources:
+    - https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf
+    - https://www.obscureiq.com/license-plate-surveillance-legality/
+```
+
+---
+
+## Summary Statistics
+
+| Verdict | Count | States |
+|---|---|---|
+| `siting_law` | **0** | *(none among these 43+DC)* |
+| `no_siting_law` | **13** | AR, CT, FL, ID, IL, MD, MN, MT, NE, NJ, TN, UT, VT |
+| `no_alpr_statute` | **31** | AL, AK, AZ, CO, DC, DE, GA, HI, IN, IA, KS, KY, LA, MA, MI, MS, MO, NV, NM, NY, ND, OH, OK, PA, RI, SC, SD, TX, WV, WI, WY |
+
+---
+
+## Key Findings and Caveats
+
+### Siting-Law Finding
+**Washington (SB 6002, 2026) remains the sole state with a statute restricting ALPR placement/data-capture near protected location categories.** No other state in this survey has a siting restriction even close to that model. Several states have DOT right-of-way permit requirements (Florida § 316.0777, Georgia DOT administrative permit, Utah UDOT special-use permit, CDOT checklist for Colorado) - but these are infrastructure/access permits comparable to requiring any entity to get permission to install hardware in a road ROW, not proximity bans near sensitive institutions.
+
+### 2025–2026 Legislation (Specifically Checked)
+- **Arkansas**: Act 668/SB 446 (2025) ✅ enacted - use/retention, no siting
+- **Colorado**: SB 26-070 (2026) ❌ died Senate floor April 29, 2026 - no ALPR statute
+- **Connecticut**: PA 26-14 (2026) ✅ enacted, eff. Oct 1, 2026 - retention/use, no siting *(NEW - note for your rules file)*
+- **Idaho**: S1180 (2025) ✅ enacted July 1, 2025 - use/access, no siting
+- **Illinois**: PA 103-540 (2024) ✅ enacted - data sharing, no siting
+- **New Jersey**: A4070 (2026) ✅ enacted March 25, 2026 - data sharing, no siting *(NEW)*
+- **Montana**: SB 344 (2023) ✅ enacted - near-prohibition with LE exceptions, no siting
+- **Tennessee**: § 55-10-302 (2014) ✅ existing statute - 90-day retention, no siting
+- **Texas**: HB 2083 (2025) ❌ died in committee - no statute
+- **Virginia**: HB 2724 (2025) - *(already handled by user)*
+
+### Confidence Flags
+- **Montana SB 344 (2023)**: The unflocked.org characterization as "warrant required" is inaccurate; actual MCA § 46-5-117 text requires specific enumerated LE purposes - stricter than most states but not technically a warrant.
+- **Alabama**: Has administrative rules (Ala. Admin. Code r. 265-X-6) but no enacted statute from the legislature; the admin code is authorized by Code of Ala. § 41-9-620 (ACJIC authority), which is not an ALPR-specific statute.
+- **Colorado § 24-72-113**: Applies to ALPR imagery as "passive surveillance records" per CDOT guidance, but is not an ALPR-specific statute - do not classify as `no_siting_law`.
+- **South Carolina H.4013**: Pending only; SC has **no enacted ALPR statute**; note the 2025 state court ruling affirming SLED authority.
+- **New York**: Bills have passed the Assembly since 2015 but consistently died in the Senate; the pattern is strong enough to classify as `no_alpr_statute` with high confidence.
+- **Connecticut**: Prior reference to § 14-59a as an ALPR statute appears to be an error in some secondary sources - the actual ALPR law is PA 26-14 (2026).

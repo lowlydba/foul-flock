@@ -1,0 +1,627 @@
+# ALPR state siting rules - HAND-CURATED, do not automate/scrape.
+#
+# This file is the legal core of the project. Every entry must carry a
+# source_url, confidence, and last_verified date. Re-review quarterly
+# (aligned to state legislative sessions).
+#
+# confidence values:
+#   verified     - statute text read directly by a human maintainer
+#   inferred     - from secondary sources (trackers, news); needs primary check
+#   needs_review - flagged for re-verification before advocacy use
+#
+# buffer_meters / buffer_specified:
+#   If the statute gives a numeric distance, put it in buffer_meters and set
+#   buffer_specified: true. If the law uses vague language ("immediate
+#   surrounding", "on or within"), leave buffer_meters null and set
+#   buffer_specified: false - the build will apply the configurable
+#   default_heuristic_buffer_m below and the UI will label the result as a
+#   heuristic proximity check, NOT a legal threshold.
+
+# Heuristic fallback distance (meters) used ONLY when a statute gives no
+# numeric distance. Override at build time with --default-buffer.
+default_heuristic_buffer_m: 100
+
+# Manufacturers primarily known for camera types excluded from ALPR statutes
+# (school-bus safety, speed safety, automated traffic safety systems).
+# Cameras from these vendors in states whose rules declare
+# statutory_exclusions are marked "possible_exclusion" instead of flagged,
+# to reduce false positives. Tagging is crowdsourced - treat as a hint.
+exclusion_manufacturer_watchlist:
+  - Verra Mobility
+  - Redflex
+  - American Traffic Solutions
+  - Conduent
+  - Sensys Gatso
+  - NovoaGlobal
+  - Blue Line Solutions
+  - Altumint
+  - BusPatrol
+
+# Maps rule restricted_category values to Overture places taxonomy codes.
+# The taxonomy is vendored at build/vendor/overture_categories.csv (CC-BY-4.0,
+# from the OvertureMaps/schema repo; see build/vendor/README.md for the pin).
+# A place matches a protected category when its categories.primary code
+# equals a listed code OR has one as a taxonomy ancestor, so
+# "elementary_school" matches via "school" ([education,school,...]).
+# If you change this mapping, delete cache/overture_places_*.json so the
+# next build refetches (cached files record the mapping they were built
+# with and self-invalidate, but only when online).
+category_overture_mapping:
+  school:
+    # education > school subtree: K-12 and equivalents (charter, public,
+    # private, elementary/middle/high, montessori, preschool, religious).
+    # college_university deliberately excluded for parity with the prior
+    # OSM amenity=school scope; revisit per statute if a law clearly
+    # covers higher education.
+    - school
+  place_of_worship:
+    # religious_organization subtree: church_cathedral, mosque, synagogue,
+    # temple, buddhist/hindu/sikh temples, shinto_shrines,
+    # religious_destination.
+    - religious_organization
+  healthcare_facility:
+    # Hospitals, medical centers, and urgent care. The generic doctor
+    # subtree was evaluated and dropped 2026-07-18: Overture carries every
+    # individual specialist practice (~9x OSM's healthcare count), which
+    # buried real facilities in strip-mall office noise. Pediatric
+    # practices are retained (child-focused sites are squarely what these
+    # statutes protect), and childrens_hospital sits outside the hospital
+    # subtree in the taxonomy so it needs its own anchor. Also excludes
+    # dentists, counseling, labs, and B2B medical suppliers.
+    - hospital
+    - childrens_hospital
+    - medical_center
+    - urgent_care_clinic
+    - pediatrician
+  courthouse:
+    - courthouse
+  food_bank:
+    - food_banks
+
+# States checked and found to have NO siting-specific ALPR statute (retention/
+# access/use rules only, or nothing). Drives the "no siting law found" UI
+# state. Deliberately NOT exhaustive - absence from this list means
+# "not yet reviewed", which the UI also distinguishes.
+states_reviewed_no_siting_law:
+  - state_code: CA
+    verdict: no_siting_law
+    note: "SB 274 (2025) sensitive-location placement language vetoed; not law."
+    last_verified: 2026-07-18
+  - state_code: OR
+    verdict: no_siting_law
+    note: "2026 retention law only; no siting restriction."
+    last_verified: 2026-07-18
+  - state_code: NH
+    verdict: no_siting_law
+    note: "RSA 261:75-b restricts use/retention, not placement near protected sites."
+    last_verified: 2026-07-18
+  - state_code: ME
+    verdict: no_siting_law
+    note: "29-A M.R.S. §2117-A use/retention limits; no siting language."
+    last_verified: 2026-07-18
+  - state_code: NC
+    verdict: no_siting_law
+    note: "Transparency/use rules only; no protected-location siting ban."
+    last_verified: 2026-07-18
+
+  - state_code: AL
+    verdict: no_alpr_statute
+    note: >-
+      No enacted statutory law. Alabama Criminal Justice Information Center
+      issued administrative rules (Ala. Admin. Code r. 265-X-6-.01 et seq.,
+      eff.
+    source_url: "https://www.law.cornell.edu/regulations/alabama/Ala-Admin-Code-r-265-X-6-.01"
+    last_verified: 2026-07-18
+  - state_code: AK
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute found; confirmed by LAPPA Sept 2025 survey and
+      obscureiq.com 2026 map. General surveillance and privacy laws apply by
+      default.
+    source_url: "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
+    last_verified: 2026-07-18
+  - state_code: AZ
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey. Local
+      agency policies govern use.
+    source_url: "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
+    last_verified: 2026-07-18
+  - state_code: AR
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: Ark. Code Ann. §§ 12-12-1801 to 12-12-1808 ('Automatic
+      License Plate Reader System Act'), originally enacted Act 1491 (2013),
+      significantly amended by Act 668 / SB 446 (signed April 2025, 95th
+      General Assembly).
+    source_url: "https://arkleg.state.ar.us/Bills/Detail?id=SB446&ddBienniumSession=2025%2F2025R"
+    last_verified: 2026-07-18
+  - state_code: CO
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. C.R.S. § 24-72-113 (enacted 2010, still
+      current) limits retention of all government 'passive surveillance
+      records' - a category that CDOT guidance explicitly includes ALPR
+      imagery - to 3 years, with access restrictions after year 1.
+    source_url: "https://colorado.public.law/statutes/crs_24-72-113"
+    last_verified: 2026-07-18
+  - state_code: CT
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: Connecticut Public Act 26-14 (SB 397 / HB 5449),
+      passed 2026 session, effective October 1, 2026.
+    source_url: "https://legiscan.com/CT/bill/SB00397/2026"
+    last_verified: 2026-07-18
+  - state_code: DE
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and
+      obscureiq 2026. Agency-level policies govern use.
+    source_url: "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
+    last_verified: 2026-07-18
+  - state_code: DC
+    verdict: no_alpr_statute
+    note: >-
+      No enacted ALPR statute. DC Code §§ 50-2209.01-50-2209.11 covers
+      automated traffic enforcement (speed/red-light cameras) but not ALPR
+      surveillance. MPD operates on an internal policy of 30-day on-board /
+      90-day central-server retention.
+    source_url: "https://policecomplaints.dc.gov/publication/automated-license-plate-readers"
+    last_verified: 2026-07-18
+  - state_code: FL
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: Fla. Stat. § 316.0777 (current, last updated per FDOT
+      2024).
+    source_url: "https://www.leg.state.fl.us/Statutes/index.cfm?App_mode=Display_Statute&URL=0300-0399/0316/Sections/0316.0777.html"
+    last_verified: 2026-07-18
+  - state_code: GA
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute in O.C.G.A. Georgia DOT issues administrative
+      permits for ALPR placement on state right-of-way
+      (operational/infrastructure permits), but no privacy or data-focused
+      ALPR statute exists.
+    source_url: "https://www.dot.ga.gov/GDOT/Pages/ALPR.aspx"
+    last_verified: 2026-07-18
+  - state_code: HI
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey. No siting
+      restrictions.
+    source_url: "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
+    last_verified: 2026-07-18
+  - state_code: ID
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: Idaho Code § 49-1432 (enacted by S1180, Ch. 316,
+      signed April 4, 2025, effective July 1, 2025).
+    source_url: "https://law.justia.com/codes/idaho/title-49/chapter-14/section-49-1432/"
+    last_verified: 2026-07-18
+  - state_code: IL
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: 625 ILCS 5/2-130, enacted by Public Act 103-540 (eff.
+      January 1, 2024).
+    source_url: "https://www.ilga.gov/Documents/legislation/ilcs/documents/062500050K2-130.htm"
+    last_verified: 2026-07-18
+  - state_code: IN
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Rapid Flock Safety deployment in Indianapolis,
+      Fishers, Muncie, Gary with no state statutory framework. Agency policies
+      govern.
+    source_url: "https://mckinneylaw.iu.edu/practice/law-reviews/ilr/pdf/vol58p449.pdf"
+    last_verified: 2026-07-18
+  - state_code: IA
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. ACLU Iowa documented widespread LE deployment
+      with no binding state-level statute as of 2025. Agency policies govern.
+    source_url: "https://www.aclu-ia.org/publications/automatic-license-plate-reader-report-raises-concerns-about-expansion-of-government-surveillance-in-iowa/"
+    last_verified: 2026-07-18
+  - state_code: KS
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR statute. SB 305 (2021) would have regulated collection, use, and
+      storage of ALPR data but did not become law. Kansas Legislative Research
+      Dept documented documented abuse cases. Agency policies and MOUs govern
+      retention (typically 6 months).
+    source_url: "https://klrd.gov/publications/automated-license-plate-readers/"
+    last_verified: 2026-07-18
+  - state_code: KY
+    verdict: no_alpr_statute
+    note: >-
+      No enacted ALPR statute. SB 185 (2025 session) would have limited use to
+      LE/public safety, set 90-day retention, prohibited data sale, required
+      written policies - but was referred to Senate Judiciary Committee and
+      did not advance.
+    source_url: "https://apps.legislature.ky.gov/record/25RS/SB185.html"
+    last_verified: 2026-07-18
+  - state_code: LA
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Agency-level policies govern. Confirmed by
+      LAPPA Sept 2025 survey. No siting restrictions.
+    source_url: "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
+    last_verified: 2026-07-18
+  - state_code: MD
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: Md. Code, Public Safety § 3-509, as amended by HB 1081
+      / SB 840 (enacted 2024, effective October 1, 2024). Prohibits LE
+      agencies and their contracted vendors from selling ALPR data or
+      licensing/subscribing access to it.
+    source_url: "https://legiscan.com/MD/bill/HB1081/2024"
+    last_verified: 2026-07-18
+  - state_code: MA
+    verdict: no_alpr_statute
+    note: >-
+      No enacted ALPR statute. H.3755 (194th General Court, 2025-26), 'An Act
+      Establishing Driver Privacy Protections,' was favorably reported by
+      committee and referred to House Ways & Means as of March 23, 2026; not
+      enacted as of July 2026.
+    source_url: "https://malegislature.gov/Bills/194/H3755.Html"
+    last_verified: 2026-07-18
+  - state_code: MI
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Significant Flock deployment in metro Detroit,
+      Grand Rapids, and Lansing with no statutory protections as of 2025.
+      Confirmed by LAPPA Sept 2025 survey and unflocked.org.
+    source_url: "https://unflocked.org/state-laws"
+    last_verified: 2026-07-18
+  - state_code: MN
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: Minn. Stat. § 13.824 (enacted 2015, amended; Data
+      Practices Act chapter) + § 626.8472 (policy requirement).
+    source_url: "https://www.revisor.mn.gov/statutes/cite/13.824"
+    last_verified: 2026-07-18
+  - state_code: MS
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and
+      obscureiq 2026. Agency policies govern.
+    source_url: "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
+    last_verified: 2026-07-18
+  - state_code: MO
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. HB 658 (2025) introduced but did not advance.
+      Confirmed by LAPPA Sept 2025 and stateline.org Oct 2025.
+    source_url: "https://house.mo.gov/Bill.aspx?bill=HB658&year=2025&code=R"
+    last_verified: 2026-07-18
+  - state_code: MT
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: Mont. Code Ann. § 46-5-117 (enacted via SB 344, signed
+      May 8, 2023; 'Revise license plate laws').
+    source_url: "https://mca.legmt.gov/bills/mca/title_0460/chapter_0050/part_0010/section_0170/0460-0050-0010-0170.html"
+    last_verified: 2026-07-18
+  - state_code: NE
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: Neb. Rev. Stat. §§ 60-3201 to 60-3209 ('Automatic
+      License Plate Reader Privacy Act,' enacted 2018). Limits retention to
+      180 days unless flagged as evidence in a criminal proceeding.
+    source_url: "https://ncc.nebraska.gov/automatic-license-plate-reader-resources"
+    last_verified: 2026-07-18
+  - state_code: NV
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey. Agency
+      policies govern.
+    source_url: "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
+    last_verified: 2026-07-18
+  - state_code: NJ
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: New Jersey Privacy Protection Act (A4070 / S4070),
+      enacted and signed March 25, 2026.
+    source_url: "https://www.billtrack50.com/billdetail/1969033"
+    last_verified: 2026-07-18
+  - state_code: NM
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. HB 127 (2025 session) introduced but did not
+      advance (confirmed by Stateline Oct 2025). Confirmed by LAPPA Sept 2025.
+    source_url: "https://www.nmlegis.gov/Legislation/Legislation?chamber=H&legType=B&legNo=127&year=25"
+    last_verified: 2026-07-18
+  - state_code: NY
+    verdict: no_alpr_statute
+    note: >-
+      No enacted ALPR statute. Bills requiring minimum ALPR policy standards
+      and mandatory posting (A4157/S3165 in 2023-24; S963/A907 in 2025-26)
+      have passed the Assembly repeatedly but died in the Senate.
+    source_url: "https://www.nysenate.gov/legislation/bills/2023/A4157"
+    last_verified: 2026-07-18
+  - state_code: ND
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and
+      obscureiq 2026.
+    source_url: "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
+    last_verified: 2026-07-18
+  - state_code: OH
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and
+      obscureiq 2026. General surveillance laws apply.
+    source_url: "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
+    last_verified: 2026-07-18
+  - state_code: OK
+    verdict: no_alpr_statute
+    note: >-
+      No enacted ALPR statute. SB 857 (2025) introduced but did not advance
+      (confirmed by Stateline Oct 2025). No siting restrictions in the failed
+      bill.
+    source_url: "https://www.oklegislature.gov/BillInfo.aspx?Bill=sb857&Session=2500"
+    last_verified: 2026-07-18
+  - state_code: PA
+    verdict: no_alpr_statute
+    note: >-
+      No enacted ALPR statute. SB 933 (2025-26 session, sponsors Picozzi et
+      al.) would provide for ALPR systems under Title 75 (Vehicles); referred
+      to Transportation Committee July 14, 2025; status pending as of research
+      date.
+    source_url: "https://www.palegis.us/legislation/bills/2025/sb933"
+    last_verified: 2026-07-18
+  - state_code: RI
+    verdict: no_alpr_statute
+    note: >-
+      No enacted ALPR statute. H5659 (2025 session) introduced but did not
+      advance (confirmed by Stateline Oct 2025). No siting restrictions in the
+      failed bill.
+    source_url: "https://legiscan.com/RI/text/H5659/id/3143293"
+    last_verified: 2026-07-18
+  - state_code: SC
+    verdict: no_alpr_statute
+    note: >-
+      No enacted ALPR statute. H.3374 (2023-24) and H.4013 (2025-26)
+      introduced provisions on permitted entities, DOT permit for non-
+      interstate ROW placement, and retention - but neither has been enacted.
+      H.4013 remains pending in 2025-26 session.
+    source_url: "https://www.scstatehouse.gov/sess126_2025-2026/bills/4013.htm"
+    last_verified: 2026-07-18
+  - state_code: SD
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and
+      obscureiq 2026.
+    source_url: "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
+    last_verified: 2026-07-18
+  - state_code: TN
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: Tenn. Code Ann. § 55-10-302 (enacted by 2014 Acts ch.
+      625, effective July 1, 2014).
+    source_url: "https://law.justia.com/codes/tennessee/title-55/chapter-10/part-3/section-55-10-302/"
+    last_verified: 2026-07-18
+  - state_code: TX
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. HB 2083 (89th Legislature, 2025) introduced
+      restrictions on governmental entity ALPR use but died in Homeland
+      Security, Public Safety & Veterans' Affairs Committee March 2025 without
+      a vote.
+    source_url: "https://capitol.texas.gov/BillLookup/History.aspx?LegSess=89R&Bill=HB2083"
+    last_verified: 2026-07-18
+  - state_code: UT
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: Utah Code Ann. §§ 41-6a-2001 to 41-6a-2006 ('Automatic
+      License Plate Reader System Act,' enacted 2013, amended by Ch. 251, 2024
+      General Session).
+    source_url: "https://le.utah.gov/xcode/Title41/Chapter6A/41-6a-P20.html"
+    last_verified: 2026-07-18
+  - state_code: VT
+    verdict: no_siting_law
+    note: >-
+      Has ALPR statute: 23 V.S.A. § 1607 (enacted 2013 No. 69, most recently
+      amended by 2023 No. 135 (Adj. Sess.) § 1a, effective July 1, 2025).
+      Requires ALPR operators to be certified by Vermont Criminal Justice
+      Council.
+    source_url: "https://legislature.vermont.gov/statutes/section/23/015/01607"
+    last_verified: 2026-07-18
+  - state_code: WV
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and
+      obscureiq 2026.
+    source_url: "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
+    last_verified: 2026-07-18
+  - state_code: WI
+    verdict: no_alpr_statute
+    note: >-
+      No enacted ALPR statute. ACLU Wisconsin documented multiple abuse cases
+      in 2025; legislative proposals introduced but not passed as of 2026.
+      Confirmed by unflocked.org and LAPPA survey.
+    source_url: "https://unflocked.org/state-laws"
+    last_verified: 2026-07-18
+  - state_code: WY
+    verdict: no_alpr_statute
+    note: >-
+      No ALPR-specific statute. Confirmed by LAPPA Sept 2025 survey and
+      obscureiq 2026.
+    source_url: "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
+    last_verified: 2026-07-18
+
+rules:
+  # ---------------------------------------------------------------- WA ----
+  - rule_id: WA-SB6002-schools
+    state_code: WA
+    state_division_id: de05ce45-04d6-4428-a3a1-fbd7984786fc  # Overture GERS: Washington
+    statute_name: "Driver Privacy Act (SB 6002)"
+    statute_citation: "Wash. SB 6002 (2026), RCW Title 46 (new chapter)"
+    effective_date: 2026-03-30
+    restricted_category: school
+    statutory_language: >-
+      "on or immediately surrounding" the protected premises (no numeric
+      distance given; wording paraphrased from bill summary, verify against
+      final RCW text)
+    buffer_meters: null
+    buffer_specified: false   # "on or immediately surrounding" - no numeric distance in bill summary reviewed
+    statutory_exclusions: >-
+      SB 6002 excludes "automated school bus safety cameras, speed safety
+      camera systems, and automated traffic safety camera systems, as defined
+      in RCW 46.63.210" from its ALPR definition. A device of those types is
+      not covered by this rule - verify device type before reporting.
+    retention_days: 21
+    source_url: "https://app.leg.wa.gov/billsummary?BillNumber=6002&Year=2026"
+    confidence: needs_review  # secondary sources conflict on whether a 300ft figure appears in final text
+    last_verified: 2026-07-18
+
+  - rule_id: WA-SB6002-worship
+    state_code: WA
+    state_division_id: de05ce45-04d6-4428-a3a1-fbd7984786fc  # Overture GERS: Washington
+    statute_name: "Driver Privacy Act (SB 6002)"
+    statute_citation: "Wash. SB 6002 (2026), RCW Title 46 (new chapter)"
+    effective_date: 2026-03-30
+    restricted_category: place_of_worship
+    statutory_language: >-
+      "on or immediately surrounding" the protected premises (no numeric
+      distance given; wording paraphrased from bill summary, verify against
+      final RCW text)
+    buffer_meters: null
+    buffer_specified: false
+    statutory_exclusions: >-
+      SB 6002 excludes "automated school bus safety cameras, speed safety
+      camera systems, and automated traffic safety camera systems, as defined
+      in RCW 46.63.210" from its ALPR definition. A device of those types is
+      not covered by this rule - verify device type before reporting.
+    retention_days: 21
+    source_url: "https://app.leg.wa.gov/billsummary?BillNumber=6002&Year=2026"
+    confidence: needs_review
+    last_verified: 2026-07-18
+
+  - rule_id: WA-SB6002-healthcare
+    state_code: WA
+    state_division_id: de05ce45-04d6-4428-a3a1-fbd7984786fc  # Overture GERS: Washington
+    statute_name: "Driver Privacy Act (SB 6002)"
+    statute_citation: "Wash. SB 6002 (2026), RCW Title 46 (new chapter)"
+    effective_date: 2026-03-30
+    restricted_category: healthcare_facility
+    statutory_language: >-
+      "on or immediately surrounding" the protected premises (no numeric
+      distance given; wording paraphrased from bill summary, verify against
+      final RCW text)
+    buffer_meters: null
+    buffer_specified: false
+    statutory_exclusions: >-
+      SB 6002 excludes "automated school bus safety cameras, speed safety
+      camera systems, and automated traffic safety camera systems, as defined
+      in RCW 46.63.210" from its ALPR definition. A device of those types is
+      not covered by this rule - verify device type before reporting.
+    retention_days: 21
+    source_url: "https://app.leg.wa.gov/billsummary?BillNumber=6002&Year=2026"
+    confidence: needs_review
+    last_verified: 2026-07-18
+
+  - rule_id: WA-SB6002-courts
+    state_code: WA
+    state_division_id: de05ce45-04d6-4428-a3a1-fbd7984786fc  # Overture GERS: Washington
+    statute_name: "Driver Privacy Act (SB 6002)"
+    statute_citation: "Wash. SB 6002 (2026), RCW Title 46 (new chapter)"
+    effective_date: 2026-03-30
+    restricted_category: courthouse
+    statutory_language: >-
+      "on or immediately surrounding" the protected premises (no numeric
+      distance given; wording paraphrased from bill summary, verify against
+      final RCW text)
+    buffer_meters: null
+    buffer_specified: false
+    statutory_exclusions: >-
+      SB 6002 excludes "automated school bus safety cameras, speed safety
+      camera systems, and automated traffic safety camera systems, as defined
+      in RCW 46.63.210" from its ALPR definition. A device of those types is
+      not covered by this rule - verify device type before reporting.
+    retention_days: 21
+    source_url: "https://app.leg.wa.gov/billsummary?BillNumber=6002&Year=2026"
+    confidence: needs_review
+    last_verified: 2026-07-18
+
+  - rule_id: WA-SB6002-foodbanks
+    state_code: WA
+    state_division_id: de05ce45-04d6-4428-a3a1-fbd7984786fc  # Overture GERS: Washington
+    statute_name: "Driver Privacy Act (SB 6002)"
+    statute_citation: "Wash. SB 6002 (2026), RCW Title 46 (new chapter)"
+    effective_date: 2026-03-30
+    restricted_category: food_bank
+    statutory_language: >-
+      "on or immediately surrounding" the protected premises (no numeric
+      distance given; wording paraphrased from bill summary, verify against
+      final RCW text)
+    buffer_meters: null
+    buffer_specified: false
+    statutory_exclusions: >-
+      SB 6002 excludes "automated school bus safety cameras, speed safety
+      camera systems, and automated traffic safety camera systems, as defined
+      in RCW 46.63.210" from its ALPR definition. A device of those types is
+      not covered by this rule - verify device type before reporting.
+    retention_days: 21
+    source_url: "https://app.leg.wa.gov/billsummary?BillNumber=6002&Year=2026"
+    confidence: needs_review
+    last_verified: 2026-07-18
+
+  # ---------------------------------------------------------------- VA ----
+  # VA 2025 law: placement "on or within the boundaries" of education/
+  # healthcare/worship properties without institutional consent. On-property
+  # rather than radius-based - proximity here is a screening heuristic to
+  # surface candidates for manual review, not a violation determination.
+  - rule_id: VA-2025-schools
+    state_code: VA
+    state_division_id: 126924d9-2351-49ff-a99f-52e802c8d876  # Overture GERS: Virginia
+    statute_name: "Virginia ALPR Act (HB 2724, 2025)"
+    statute_citation: "Va. Code Ann. § 2.2-3706.2 / 2025 Acts (verify final codification)"
+    effective_date: 2025-07-01
+    restricted_category: school
+    statutory_language: >-
+      "on or within the boundaries of" property primarily used for education,
+      healthcare, or religious worship, absent written institutional consent
+      (on-property standard, not a radius; verify against enacted text)
+    buffer_meters: null
+    buffer_specified: false   # law is on-property, not a radius; heuristic screening only
+    heuristic_buffer_meters: 50   # tighter screen: statute is an "on or within" (on-property) standard
+    retention_days: 21
+    source_url: "https://lis.virginia.gov/bill-details/20251/HB2724"
+    confidence: needs_review
+    last_verified: 2026-07-18
+
+  - rule_id: VA-2025-worship
+    state_code: VA
+    state_division_id: 126924d9-2351-49ff-a99f-52e802c8d876  # Overture GERS: Virginia
+    statute_name: "Virginia ALPR Act (HB 2724, 2025)"
+    statute_citation: "Va. Code Ann. § 2.2-3706.2 / 2025 Acts (verify final codification)"
+    effective_date: 2025-07-01
+    restricted_category: place_of_worship
+    statutory_language: >-
+      "on or within the boundaries of" property primarily used for education,
+      healthcare, or religious worship, absent written institutional consent
+      (on-property standard, not a radius; verify against enacted text)
+    buffer_meters: null
+    buffer_specified: false
+    heuristic_buffer_meters: 50   # tighter screen: statute is an "on or within" (on-property) standard
+    retention_days: 21
+    source_url: "https://lis.virginia.gov/bill-details/20251/HB2724"
+    confidence: needs_review
+    last_verified: 2026-07-18
+
+  - rule_id: VA-2025-healthcare
+    state_code: VA
+    state_division_id: 126924d9-2351-49ff-a99f-52e802c8d876  # Overture GERS: Virginia
+    statute_name: "Virginia ALPR Act (HB 2724, 2025)"
+    statute_citation: "Va. Code Ann. § 2.2-3706.2 / 2025 Acts (verify final codification)"
+    effective_date: 2025-07-01
+    restricted_category: healthcare_facility
+    statutory_language: >-
+      "on or within the boundaries of" property primarily used for education,
+      healthcare, or religious worship, absent written institutional consent
+      (on-property standard, not a radius; verify against enacted text)
+    buffer_meters: null
+    buffer_specified: false
+    heuristic_buffer_meters: 50   # tighter screen: statute is an "on or within" (on-property) standard
+    retention_days: 21
+    source_url: "https://lis.virginia.gov/bill-details/20251/HB2724"
+    confidence: needs_review
+    last_verified: 2026-07-18

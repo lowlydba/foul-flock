@@ -1,0 +1,285 @@
+/* Foul Flock - map chrome on top of Pico CSS (classless, vendored at
+   assets/pico.classless.min.css).
+
+   Division of labor:
+   - Pico owns base typography, links, buttons, form controls, details,
+     and the light/dark switch (prefers-color-scheme).
+   - This file owns the theme tokens (fonts + colors, set via --pico-*
+     variables below) and the map chrome: topbar, legend, detail panel,
+     modal, and MapLibre fixes.
+
+   Color system, kept minimal: one interactive accent (deep teal) via
+   Pico's primary, neutral ink/paper from Pico, and status hues reserved
+   for meaning on the map (red flagged, blue clear, brown possibly-exempt,
+   purple law states, grey reviewed). All pairs meet WCAG 2.1 AA; asserted
+   by axe in tests/a11y.spec.js. */
+
+:root {
+  /* Fonts: system sans for UI/prose, monospace for data surfaces
+     (counts, coordinates, distances, code) - classic GIS pairing. */
+  --pico-font-family-sans-serif: -apple-system, "Segoe UI", system-ui,
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --pico-font-family-monospace: ui-monospace, "Cascadia Mono", Consolas,
+    "SF Mono", Menlo, monospace;
+  --pico-font-family: var(--pico-font-family-sans-serif);
+
+  /* Accent: deep teal, AA on light surfaces. */
+  --pico-primary: #0f766e;
+  --pico-primary-background: #0f766e;
+  --pico-primary-border: #0f766e;
+  --pico-primary-hover: #0c5d57;
+  --pico-primary-hover-background: #0c5d57;
+  --pico-primary-hover-border: #0c5d57;
+  --pico-primary-inverse: #ffffff;
+  --pico-background-color: #f7f7f5;
+
+  /* Aliases the map chrome reads; colors defer to Pico. */
+  --font-ui: var(--pico-font-family-sans-serif);
+  --font-data: var(--pico-font-family-monospace);
+  --bg: var(--pico-background-color);
+  --card: var(--pico-card-background-color);
+  --ink: var(--pico-color);
+  --muted: var(--pico-muted-color);
+  --border: var(--pico-muted-border-color);
+  --accent-text: var(--pico-primary);
+
+  /* Status hues (map semantics, not Pico's problem). */
+  --flagged: #e0332c;
+  --flagged-ink: #b3261e;
+  --clear: #2e7dd1;
+  --excluded: #8d6e2f;
+  --law: #8a3ffc;
+  --nolaw: #9aa1a9;
+  --warn-bg: #fdf6e0;
+  --warn-border: #e8d795;
+  --warn-ink: #6d5200;
+  --quote-bg: #f3f0fa;
+  --quote-ink: #3d2e5c;
+  --flagcard-bg: #fcf7f6;
+  --flagcard-border: #e6d5d3;
+  --flagcard-muted: var(--muted);
+  --shadow: rgba(15, 23, 32, .14);
+}
+
+/* Mirrors Pico's dark-scheme selector so these win over its defaults. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) {
+    --pico-primary: #4fd1c5;
+    --pico-primary-background: #0f766e;
+    --pico-primary-border: #0f766e;
+    --pico-primary-hover: #79ded5;
+    --pico-primary-hover-background: #0c5d57;
+    --pico-primary-hover-border: #0c5d57;
+    --pico-primary-inverse: #ffffff;
+    --pico-background-color: #14181d;
+
+    --flagged-ink: #ff7b72;
+    --clear: #79b8ff;
+    --excluded: #d4a72c;
+    --nolaw: #565e68;
+    --warn-bg: #2b230e;
+    --warn-border: #5c4a1a;
+    --warn-ink: #e3c878;
+    --quote-bg: #221c33;
+    --quote-ink: #cdbcf0;
+    --flagcard-bg: #271d1c;
+    --flagcard-border: #4a3232;
+    --flagcard-muted: #a8b1bc; /* Pico's dark muted falls under AA here */
+    --shadow: rgba(0, 0, 0, .5);
+  }
+}
+
+/* ------------------------------- map page ------------------------------ */
+
+html, body { margin: 0; height: 100%; }
+body { padding: 0; }
+#map { position: absolute; inset: 0; }
+
+#topbar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+  max-width: none; margin: 0;
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 10px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+}
+#topbar h1 { font-size: 16px; font-weight: 650; margin: 0;
+  letter-spacing: -.01em; color: var(--ink); }
+#topbar h1 .ff-sub { font-size: 12.5px; color: var(--muted); font-weight: 400;
+  margin-left: 10px; letter-spacing: 0; }
+#stats { font-size: 12px; color: var(--muted); flex: 1;
+  font-family: var(--font-data); }
+#faq-link { font-size: 13px; white-space: nowrap; }
+#about-btn {
+  width: auto; margin: 0; padding: 4px 12px; font-size: 13px;
+  background: var(--card); color: var(--accent-text);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+#about-btn:hover { border-color: var(--accent-text); }
+
+/* ------------------------------- legend -------------------------------- */
+
+#legend {
+  position: absolute; bottom: 34px; left: 12px; z-index: 5;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; max-width: 254px; font-size: 12.5px; color: var(--ink);
+  box-shadow: 0 2px 10px var(--shadow); line-height: 1.4;
+}
+.legend-title { font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--muted); margin-bottom: 5px;
+  font-weight: 600; }
+#legend .row { display: flex; align-items: center; gap: 7px; margin: 3px 0;
+  white-space: nowrap; }
+#legend em { color: var(--muted); font-style: normal; font-size: 11px; }
+#method-notes { margin: 8px 0 0; border-top: 1px solid var(--border);
+  padding-top: 6px; }
+#method-notes summary { font-size: 11.5px; color: var(--muted);
+  line-height: 1.4; }
+#buffer-note { color: var(--muted); font-size: 11.5px; max-width: 230px;
+  white-space: normal; }
+#buffer-note p { margin: 5px 0; }
+#buffer-note code { font-size: 10.5px; padding: 0 3px; }
+
+.dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto;
+  border: 1.5px solid rgba(0,0,0,.35); }
+.dot.flagged { background: var(--flagged); }
+.dot.clear { background: var(--clear); }
+.dot.excluded { background: var(--excluded); }
+.swatch { width: 14px; height: 12px; flex: 0 0 auto; border-radius: 3px;
+  opacity: .8; border: 1px solid rgba(0,0,0,.3); }
+.swatch.law { background: var(--law); }
+.swatch.nolaw { background: var(--nolaw); }
+.icon-chip { width: 14px; height: 14px; flex: 0 0 auto; border-radius: 50%; }
+
+.buffer-row { display: flex; align-items: center; gap: 6px; margin: 6px 0 2px; }
+.buffer-row:first-of-type {
+  border-top: 1px solid var(--border); padding-top: 8px; margin-top: 8px;
+}
+.buffer-row label { font-size: 11px; color: var(--muted); margin: 0;
+  white-space: nowrap; width: 106px; }
+.buffer-row input[type="range"] { flex: 1; min-width: 56px; margin: 0; }
+.buffer-row output { font-size: 11.5px; font-weight: 600; min-width: 44px;
+  text-align: right; font-family: var(--font-data); }
+
+/* ---------------------------- detail panel ----------------------------- */
+
+#detail {
+  position: absolute; top: 56px; right: 12px; bottom: 24px; z-index: 6;
+  width: 380px; max-width: calc(100vw - 24px);
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 4px 18px var(--shadow); overflow-y: auto;
+  padding: 16px 18px; font-size: 13.5px; color: var(--ink); line-height: 1.5;
+}
+.hidden { display: none; }
+#detail.hidden, #about.hidden { display: none; }
+#detail-close {
+  position: absolute; top: 8px; right: 10px; width: auto; margin: 0;
+  padding: 0 4px; border: none; background: none;
+  font-size: 22px; color: var(--muted); line-height: 1;
+}
+#detail h2 { font-size: 16px; font-weight: 650; margin: 0 32px 4px 0;
+  letter-spacing: -.01em; color: var(--ink); }
+#detail h3 { font-size: 11px; margin: 16px 0 6px; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+.status-badge { display: inline-block; padding: 2px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; color: #ffffff; margin: 4px 0 8px; }
+.status-badge.flagged { background: #b3261e; }
+.status-badge.checked_clear { background: #1f5f9e; }
+.status-badge.possible_exclusion { background: #6d5410; }
+.kv { margin: 2px 0; font-family: var(--font-data); font-size: 12.5px; }
+.kv b { color: var(--muted); font-weight: 600; font-family: var(--font-ui); }
+
+.match-card {
+  border: 1px solid var(--flagcard-border); border-left: 4px solid var(--flagged);
+  border-radius: 6px; padding: 10px 12px; margin: 8px 0;
+  background: var(--flagcard-bg);
+}
+.match-card .place { font-weight: 600; }
+.match-card .dist { font-size: 15px; font-weight: 700;
+  color: var(--flagged-ink); font-family: var(--font-data); }
+.heuristic-tag {
+  display: inline-block; background: var(--warn-bg); color: var(--warn-ink);
+  border: 1px solid var(--warn-border); border-radius: 4px; font-size: 11px;
+  padding: 1px 6px; margin-left: 6px; vertical-align: middle;
+}
+.match-card .cite { font-size: 12px; color: var(--flagcard-muted); margin-top: 5px; }
+.statute-quote {
+  margin: 7px 0 2px; padding: 7px 10px; font-size: 12.5px;
+  background: var(--quote-bg); border-left: 3px solid var(--law);
+  border-radius: 4px; color: var(--quote-ink);
+}
+.statute-quote .lang { font-style: italic; }
+
+.report-btn {
+  width: 100%; margin: 14px 0 0; padding: 9px; font-size: 13.5px;
+  font-weight: 600; background: #b3261e; border-color: #b3261e;
+  color: #ffffff; border-radius: 7px;
+}
+.report-btn:hover { background: #99201a; border-color: #99201a; }
+.report-box { margin-top: 10px; }
+.report-box textarea {
+  height: 260px; margin: 0; padding: 8px;
+  font: 12px/1.5 var(--font-data); resize: vertical;
+}
+.report-actions { display: flex; gap: 8px; margin-top: 6px; }
+.report-actions button {
+  flex: 1; width: auto; margin: 0; padding: 7px; font-size: 12.5px;
+  background: var(--card); color: var(--accent-text);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.report-actions button:hover { border-color: var(--accent-text); }
+.disclaimer {
+  background: var(--warn-bg); border: 1px solid var(--warn-border);
+  border-radius: 6px; padding: 8px 10px; font-size: 12px;
+  color: var(--warn-ink); margin: 10px 0;
+}
+.disclaimer details { margin: 4px 0 0; padding: 0; border: none; }
+.disclaimer summary { font-weight: 600; font-size: 11.5px; color: inherit; }
+
+/* -------------------------------- modal -------------------------------- */
+
+.modal { position: fixed; inset: 0; z-index: 20; background: rgba(10,14,18,.55);
+  display: flex; align-items: center; justify-content: center; padding: 20px; }
+.modal-card { position: relative; background: var(--card); border-radius: 12px;
+  border: 1px solid var(--border);
+  max-width: 640px; max-height: 85vh; overflow-y: auto; padding: 24px 28px;
+  font-size: 13.5px; color: var(--ink); line-height: 1.55; }
+.modal-card h2 { margin-top: 0; font-size: 19px; font-weight: 650;
+  letter-spacing: -.01em; color: var(--ink); }
+.modal-card h3 { font-size: 14px; font-weight: 650; color: var(--ink); }
+.modal-close { position: absolute; top: 10px; right: 14px; width: auto;
+  margin: 0; padding: 0 4px; border: none; background: none;
+  font-size: 24px; color: var(--muted); }
+.fine { color: var(--muted); font-size: 12px; }
+.pop-fine { color: #59636e; font-size: 11.5px; }
+
+/* --------------------------- MapLibre chrome --------------------------- */
+
+/* Popups and attribution keep light cards in both schemes, so pin dark
+   ink and a readable link color on them. */
+.maplibregl-popup-content { font-size: 12.5px; color: #1f2328;
+  font-family: var(--font-ui); line-height: 1.45; }
+.maplibregl-popup-content a { color: #0f766e; }
+.maplibregl-ctrl-attrib {
+  background: rgba(255, 255, 255, .92) !important;
+  font-family: var(--font-ui);
+}
+.maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib a {
+  color: #1f2328 !important; font-size: 11.5px;
+}
+.maplibregl-ctrl-scale {
+  font-family: var(--font-data); font-size: 10.5px;
+  background: rgba(255, 255, 255, .85); color: #1f2328;
+  border-color: #1f2328;
+}
+.state-tip .maplibregl-popup-content { padding: 6px 10px; }
+
+/* ------------------------- FAQ page (Pico-led) ------------------------- */
+
+body.page { height: auto; }
+.page .backlink { display: inline-block; margin-bottom: 18px;
+  text-decoration: none; border-bottom: 1px dotted var(--accent-text); }
+.page .tagline { color: var(--muted); margin-top: -.5rem; }
+.page footer { margin-top: 48px; color: var(--muted); font-size: .85em;
+  border-top: 1px solid var(--border); padding-top: 14px; }

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; box-sizing: border-box; }
+  body {
+    width: 1200px; height: 630px; overflow: hidden;
+    background: #14181d;
+    background-image:
+      linear-gradient(rgba(45, 212, 191, .05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(45, 212, 191, .05) 1px, transparent 1px);
+    background-size: 60px 60px;
+    font-family: -apple-system, "Segoe UI", system-ui, Roboto, sans-serif;
+    color: #e7ecf1;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 0 96px; position: relative;
+  }
+  .flock { position: absolute; top: 70px; right: 90px; }
+  h1 { font-size: 92px; font-weight: 750; letter-spacing: -.02em; }
+  h1 .accent { color: #2dd4bf; }
+  p.tag { font-size: 34px; color: #a3adb8; margin-top: 18px; max-width: 820px;
+    line-height: 1.35; }
+  p.cta { font-size: 26px; color: #2dd4bf; margin-top: 40px; }
+  .url { position: absolute; bottom: 44px; right: 96px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 24px; color: #2dd4bf; }
+</style>
+</head>
+<body>
+  <svg class="flock" width="300" height="180" viewBox="0 0 300 180" fill="none"
+    stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 70 Q45 45 70 70" stroke="#2dd4bf" stroke-width="10" opacity=".55"/>
+    <path d="M95 40 Q120 15 145 40" stroke="#2dd4bf" stroke-width="10" opacity=".75"/>
+    <path d="M170 75 Q195 50 220 75" stroke="#2dd4bf" stroke-width="10" opacity=".55"/>
+    <path d="M90 125 Q120 95 150 125" stroke="#e0332c" stroke-width="13"/>
+    <circle cx="238" cy="138" r="20" stroke="#e7ecf1" stroke-width="8"/>
+    <line x1="252" y1="152" x2="272" y2="172" stroke="#e7ecf1" stroke-width="8"/>
+  </svg>
+  <h1>Foul <span class="accent">Flock</span></h1>
+  <p class="tag">Checks crowdsourced license-plate camera locations against
+    state placement laws.</p>
+  <p class="cta">See one near you? Look closer, then speak up.</p>
+  <div class="url">www.foulflock.com</div>
+</body>
+</html>
