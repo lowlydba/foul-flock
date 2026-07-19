@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 10
     permissions:
+      contents: read # check out the repository for the artifact
       pages: write # create the Pages deployment
       id-token: write # OIDC token that deploy-pages presents to the Pages API
     environment:
