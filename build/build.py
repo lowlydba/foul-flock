@@ -49,6 +49,10 @@ except ImportError:
     sys.exit("PyYAML required: pip install pyyaml")
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# CI pipes stdout, which makes Python block-buffer it; line-buffer so
+# progress lines stream live in the Actions log instead of in one burst.
+sys.stdout.reconfigure(line_buffering=True)
 RULES_FILE = ROOT / "rules" / "alpr_state_rules.yaml"
 CACHE_DIR = ROOT / "cache"
 OUT_DIR = ROOT / "web" / "data"
@@ -759,18 +763,20 @@ def main() -> None:
     reviewed = [s["state_code"]
                 for s in rules_doc.get("states_reviewed_no_siting_law", [])]
     divisions: dict[str, dict] = {}
-    for st in sorted(set(rule_states) | set(reviewed)):
+    div_states = sorted(set(rule_states) | set(reviewed))
+    for i, st in enumerate(div_states, 1):
         if st not in INTERIOR_POINTS:
-            print(f"    {st}: no interior probe point, skipping")
+            print(f"    [{i}/{len(div_states)}] {st}: no interior probe point, skipping")
             continue
+        print(f"    [{i}/{len(div_states)}] {st}")
         divisions[st] = fetch_division(st, args.offline)
     print(f"    {len(divisions)} state polygons")
 
     print("\n[2/5] Fetching ALPR cameras (OSM/DeFlock tagging) ...")
     cameras: list[dict] = []
-    for st in rule_states:
+    for i, st in enumerate(rule_states, 1):
         cams = fetch_cameras(st, args.offline)
-        print(f"    {st}: {len(cams)} cameras")
+        print(f"    [{i}/{len(rule_states)}] {st}: {len(cams)} cameras")
         cameras.extend(cams)
 
     print("\n[3/5] Fetching protected places (Overture places) ...")
@@ -778,14 +784,15 @@ def main() -> None:
     for r in rules:
         needed_cats[r["state_code"]].add(r["restricted_category"])
     places_by_cat: dict[str, list[dict]] = defaultdict(list)
-    for st in rule_states:
+    for i, st in enumerate(rule_states, 1):
         pls = fetch_overture_places(st, needed_cats[st], code_lookup,
                                     divisions[st], args.offline)
         by_cat = defaultdict(int)
         for p in pls:
             places_by_cat[p["category"]].append(p)
             by_cat[p["category"]] += 1
-        print(f"    {st}: " + ", ".join(f"{c}={n}" for c, n in sorted(by_cat.items())))
+        print(f"    [{i}/{len(rule_states)}] {st}: "
+              + ", ".join(f"{c}={n}" for c, n in sorted(by_cat.items())))
 
     print("\n[4/5] Matching cameras against rules ...")
     n_excl = mark_possible_exclusions(cameras, rules, rules_doc)
