@@ -262,10 +262,11 @@ def fetch_division(state_code: str, offline: bool) -> dict:
                         and cols["region"][i] == want
                         and cols["class"][i] == "land"):
                     geom = shapely.from_wkb(cols["geometry"][i])
-                    # National-overview layer: simplify (~1 km tolerance)
-                    # and snap to a ~11 m grid to keep states.geojson small.
-                    geom = shapely.simplify(geom, 0.01, preserve_topology=True)
-                    geom = shapely.set_precision(geom, 0.0001)
+                    # Light simplification (~110 m tolerance, ~1 m grid
+                    # snap): keeps coastline detail at street zoom while
+                    # holding states.geojson to a web-friendly size.
+                    geom = shapely.simplify(geom, 0.001, preserve_topology=True)
+                    geom = shapely.set_precision(geom, 0.00001)
                     entry = {
                         "state_code": state_code,
                         "name": STATE_NAMES[state_code],

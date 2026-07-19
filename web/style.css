@@ -1,32 +1,53 @@
-/* Foul Flock - theme and typography.
+/* Foul Flock - map chrome on top of Pico CSS (classless, vendored at
+   assets/pico.classless.min.css).
 
-   Type system (two families, hierarchy by weight/size):
-   - UI and prose: system sans stack (--font-ui)
-   - Data surfaces: monospace (--font-data) for counts, coordinates,
-     distances, code, and the scale bar, echoing GIS tooling
-   All text/background pairs meet WCAG 2.1 AA; asserted by axe tests in
-   tests/a11y.spec.js.
+   Division of labor:
+   - Pico owns base typography, links, buttons, form controls, details,
+     and the light/dark switch (prefers-color-scheme).
+   - This file owns the theme tokens (fonts + colors, set via --pico-*
+     variables below) and the map chrome: topbar, legend, detail panel,
+     modal, and MapLibre fixes.
 
-   Color system, kept minimal:
-   - Neutral ink/paper carries the interface
-   - One interactive accent (deep teal) for links, buttons, focus
-   - Status hues are reserved for meaning on the map: red flagged,
-     blue clear, brown possibly-exempt, purple law states, grey reviewed */
+   Color system, kept minimal: one interactive accent (deep teal) via
+   Pico's primary, neutral ink/paper from Pico, and status hues reserved
+   for meaning on the map (red flagged, blue clear, brown possibly-exempt,
+   purple law states, grey reviewed). All pairs meet WCAG 2.1 AA; asserted
+   by axe in tests/a11y.spec.js. */
 
 :root {
-  --bg: #f7f7f5;
-  --card: #ffffff;
-  --ink: #1f2328;
-  --muted: #59636e;
-  --border: #d6d9dd;
-  --accent: #14b8a6;        /* decorative only */
-  --accent-text: #0f766e;   /* links/buttons, AA on light surfaces */
-  --flagged: #e0332c;       /* dot fill, decorative */
-  --flagged-ink: #b3261e;   /* text/badge/button, AA with white */
+  /* Fonts: system sans for UI/prose, monospace for data surfaces
+     (counts, coordinates, distances, code) - classic GIS pairing. */
+  --pico-font-family-sans-serif: -apple-system, "Segoe UI", system-ui,
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --pico-font-family-monospace: ui-monospace, "Cascadia Mono", Consolas,
+    "SF Mono", Menlo, monospace;
+  --pico-font-family: var(--pico-font-family-sans-serif);
+
+  /* Accent: deep teal, AA on light surfaces. */
+  --pico-primary: #0f766e;
+  --pico-primary-background: #0f766e;
+  --pico-primary-border: #0f766e;
+  --pico-primary-hover: #0c5d57;
+  --pico-primary-hover-background: #0c5d57;
+  --pico-primary-hover-border: #0c5d57;
+  --pico-primary-inverse: #ffffff;
+  --pico-background-color: #f7f7f5;
+
+  /* Aliases the map chrome reads; colors defer to Pico. */
+  --font-ui: var(--pico-font-family-sans-serif);
+  --font-data: var(--pico-font-family-monospace);
+  --bg: var(--pico-background-color);
+  --card: var(--pico-card-background-color);
+  --ink: var(--pico-color);
+  --muted: var(--pico-muted-color);
+  --border: var(--pico-muted-border-color);
+  --accent-text: var(--pico-primary);
+
+  /* Status hues (map semantics, not Pico's problem). */
+  --flagged: #e0332c;
+  --flagged-ink: #b3261e;
   --clear: #2e7dd1;
-  --clear-ink: #1f5f9e;
   --excluded: #8d6e2f;
-  --excluded-ink: #6d5410;
   --law: #8a3ffc;
   --nolaw: #9aa1a9;
   --warn-bg: #fdf6e0;
@@ -36,26 +57,25 @@
   --quote-ink: #3d2e5c;
   --flagcard-bg: #fcf7f6;
   --flagcard-border: #e6d5d3;
+  --flagcard-muted: var(--muted);
   --shadow: rgba(15, 23, 32, .14);
-  --font-ui: -apple-system, "Segoe UI", system-ui, Roboto, "Helvetica Neue",
-    Arial, sans-serif;
-  --font-data: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo,
-    monospace;
-  font-family: var(--font-ui);
 }
 
+/* Mirrors Pico's dark-scheme selector so these win over its defaults. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14181d;
-    --card: #1c2128;
-    --ink: #e7ecf1;
-    --muted: #a3adb8;
-    --border: #343b44;
-    --accent: #2dd4bf;
-    --accent-text: #4fd1c5;
+  :root:not([data-theme=light]) {
+    --pico-primary: #4fd1c5;
+    --pico-primary-background: #0f766e;
+    --pico-primary-border: #0f766e;
+    --pico-primary-hover: #79ded5;
+    --pico-primary-hover-background: #0c5d57;
+    --pico-primary-hover-border: #0c5d57;
+    --pico-primary-inverse: #ffffff;
+    --pico-background-color: #14181d;
+
     --flagged-ink: #ff7b72;
-    --clear-ink: #79b8ff;
-    --excluded-ink: #d4a72c;
+    --clear: #79b8ff;
+    --excluded: #d4a72c;
     --nolaw: #565e68;
     --warn-bg: #2b230e;
     --warn-border: #5c4a1a;
@@ -64,38 +84,41 @@
     --quote-ink: #cdbcf0;
     --flagcard-bg: #271d1c;
     --flagcard-border: #4a3232;
+    --flagcard-muted: #a8b1bc; /* Pico's dark muted falls under AA here */
     --shadow: rgba(0, 0, 0, .5);
   }
 }
 
-* { box-sizing: border-box; }
+/* ------------------------------- map page ------------------------------ */
+
 html, body { margin: 0; height: 100%; }
+body { padding: 0; }
 #map { position: absolute; inset: 0; }
 
 #topbar {
   position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+  max-width: none; margin: 0;
   display: flex; align-items: baseline; gap: 14px;
   padding: 10px 16px;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   color: var(--ink);
 }
-#topbar h1 { font-size: 16px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
+#topbar h1 { font-size: 16px; font-weight: 650; margin: 0;
+  letter-spacing: -.01em; color: var(--ink); }
 #topbar h1 .ff-sub { font-size: 12.5px; color: var(--muted); font-weight: 400;
   margin-left: 10px; letter-spacing: 0; }
 #stats { font-size: 12px; color: var(--muted); flex: 1;
   font-family: var(--font-data); }
-#faq-link {
-  color: var(--accent-text); font-size: 13px; text-decoration: none;
-  border-bottom: 1px dotted var(--accent-text); white-space: nowrap;
-}
-#faq-link:hover { border-bottom-style: solid; }
+#faq-link { font-size: 13px; white-space: nowrap; }
 #about-btn {
-  border: 1px solid var(--border); background: var(--card);
-  color: var(--accent-text); border-radius: 6px;
-  padding: 4px 12px; font-size: 13px; cursor: pointer; font-family: inherit;
+  width: auto; margin: 0; padding: 4px 12px; font-size: 13px;
+  background: var(--card); color: var(--accent-text);
+  border: 1px solid var(--border); border-radius: 6px;
 }
 #about-btn:hover { border-color: var(--accent-text); }
+
+/* ------------------------------- legend -------------------------------- */
 
 #legend {
   position: absolute; bottom: 34px; left: 12px; z-index: 5;
@@ -109,17 +132,14 @@ html, body { margin: 0; height: 100%; }
 #legend .row { display: flex; align-items: center; gap: 7px; margin: 3px 0;
   white-space: nowrap; }
 #legend em { color: var(--muted); font-style: normal; font-size: 11px; }
-#method-notes { margin-top: 8px; border-top: 1px solid var(--border);
+#method-notes { margin: 8px 0 0; border-top: 1px solid var(--border);
   padding-top: 6px; }
-#method-notes summary { cursor: pointer; color: var(--muted); font-size: 11.5px;
-  user-select: none; }
-#method-notes summary:hover { color: var(--accent-text); }
+#method-notes summary { font-size: 11.5px; color: var(--muted);
+  line-height: 1.4; }
 #buffer-note { color: var(--muted); font-size: 11.5px; max-width: 230px;
   white-space: normal; }
 #buffer-note p { margin: 5px 0; }
-#buffer-note code { background: var(--card); border: 1px solid var(--border);
-  padding: 0 3px; border-radius: 3px; font-size: 10.5px;
-  font-family: var(--font-data); }
+#buffer-note code { font-size: 10.5px; padding: 0 3px; }
 
 .dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto;
   border: 1.5px solid rgba(0,0,0,.35); }
@@ -132,18 +152,17 @@ html, body { margin: 0; height: 100%; }
 .swatch.nolaw { background: var(--nolaw); }
 .icon-chip { width: 14px; height: 14px; flex: 0 0 auto; border-radius: 50%; }
 
-.buffer-row {
-  display: flex; align-items: center; gap: 6px; margin: 6px 0 2px;
-}
+.buffer-row { display: flex; align-items: center; gap: 6px; margin: 6px 0 2px; }
 .buffer-row:first-of-type {
   border-top: 1px solid var(--border); padding-top: 8px; margin-top: 8px;
 }
-.buffer-row label { font-size: 11px; color: var(--muted);
+.buffer-row label { font-size: 11px; color: var(--muted); margin: 0;
   white-space: nowrap; width: 106px; }
-.buffer-row input[type="range"] { flex: 1; min-width: 56px;
-  accent-color: var(--accent-text); }
+.buffer-row input[type="range"] { flex: 1; min-width: 56px; margin: 0; }
 .buffer-row output { font-size: 11.5px; font-weight: 600; min-width: 44px;
   text-align: right; font-family: var(--font-data); }
+
+/* ---------------------------- detail panel ----------------------------- */
 
 #detail {
   position: absolute; top: 56px; right: 12px; bottom: 24px; z-index: 6;
@@ -152,26 +171,24 @@ html, body { margin: 0; height: 100%; }
   box-shadow: 0 4px 18px var(--shadow); overflow-y: auto;
   padding: 16px 18px; font-size: 13.5px; color: var(--ink); line-height: 1.5;
 }
-#detail.hidden, #about.hidden { display: none; }
 .hidden { display: none; }
+#detail.hidden, #about.hidden { display: none; }
 #detail-close {
-  position: absolute; top: 8px; right: 10px; border: none; background: none;
-  font-size: 22px; cursor: pointer; color: var(--muted); line-height: 1;
+  position: absolute; top: 8px; right: 10px; width: auto; margin: 0;
+  padding: 0 4px; border: none; background: none;
+  font-size: 22px; color: var(--muted); line-height: 1;
 }
 #detail h2 { font-size: 16px; font-weight: 650; margin: 0 32px 4px 0;
-  letter-spacing: -.01em; }
+  letter-spacing: -.01em; color: var(--ink); }
 #detail h3 { font-size: 11px; margin: 16px 0 6px; text-transform: uppercase;
   letter-spacing: .07em; color: var(--muted); font-weight: 600; }
-#detail a { color: var(--accent-text); }
 .status-badge { display: inline-block; padding: 2px 10px; border-radius: 999px;
   font-size: 12px; font-weight: 600; color: #ffffff; margin: 4px 0 8px; }
 .status-badge.flagged { background: #b3261e; }
 .status-badge.checked_clear { background: #1f5f9e; }
 .status-badge.possible_exclusion { background: #6d5410; }
-.kv { margin: 2px 0; }
-.kv b { color: var(--muted); font-weight: 600; }
-.kv { font-family: var(--font-data); font-size: 12.5px; }
-.kv b { font-family: var(--font-ui); }
+.kv { margin: 2px 0; font-family: var(--font-data); font-size: 12.5px; }
+.kv b { color: var(--muted); font-weight: 600; font-family: var(--font-ui); }
 
 .match-card {
   border: 1px solid var(--flagcard-border); border-left: 4px solid var(--flagged);
@@ -186,32 +203,30 @@ html, body { margin: 0; height: 100%; }
   border: 1px solid var(--warn-border); border-radius: 4px; font-size: 11px;
   padding: 1px 6px; margin-left: 6px; vertical-align: middle;
 }
-.match-card .cite { font-size: 12px; color: var(--muted); margin-top: 5px; }
+.match-card .cite { font-size: 12px; color: var(--flagcard-muted); margin-top: 5px; }
 .statute-quote {
   margin: 7px 0 2px; padding: 7px 10px; font-size: 12.5px;
   background: var(--quote-bg); border-left: 3px solid var(--law);
   border-radius: 4px; color: var(--quote-ink);
 }
 .statute-quote .lang { font-style: italic; }
-.match-card a { color: var(--accent-text); }
 
 .report-btn {
-  display: block; width: 100%; margin-top: 14px; padding: 9px;
-  background: #b3261e; color: #ffffff; border: none; border-radius: 7px;
-  font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+  width: 100%; margin: 14px 0 0; padding: 9px; font-size: 13.5px;
+  font-weight: 600; background: #b3261e; border-color: #b3261e;
+  color: #ffffff; border-radius: 7px;
 }
-.report-btn:hover { filter: brightness(1.1); }
+.report-btn:hover { background: #99201a; border-color: #99201a; }
 .report-box { margin-top: 10px; }
 .report-box textarea {
-  width: 100%; height: 260px; font: 12px/1.5 var(--font-data);
-  border: 1px solid var(--border); border-radius: 6px; padding: 8px;
-  resize: vertical; background: var(--card); color: var(--ink);
+  height: 260px; margin: 0; padding: 8px;
+  font: 12px/1.5 var(--font-data); resize: vertical;
 }
 .report-actions { display: flex; gap: 8px; margin-top: 6px; }
 .report-actions button {
-  flex: 1; padding: 7px; border: 1px solid var(--border); background: var(--card);
-  color: var(--accent-text); border-radius: 6px; cursor: pointer;
-  font-size: 12.5px; font-family: inherit;
+  flex: 1; width: auto; margin: 0; padding: 7px; font-size: 12.5px;
+  background: var(--card); color: var(--accent-text);
+  border: 1px solid var(--border); border-radius: 6px;
 }
 .report-actions button:hover { border-color: var(--accent-text); }
 .disclaimer {
@@ -219,9 +234,10 @@ html, body { margin: 0; height: 100%; }
   border-radius: 6px; padding: 8px 10px; font-size: 12px;
   color: var(--warn-ink); margin: 10px 0;
 }
-.disclaimer details { margin-top: 4px; }
-.disclaimer summary { cursor: pointer; font-weight: 600; font-size: 11.5px;
-  user-select: none; }
+.disclaimer details { margin: 4px 0 0; padding: 0; border: none; }
+.disclaimer summary { font-weight: 600; font-size: 11.5px; color: inherit; }
+
+/* -------------------------------- modal -------------------------------- */
 
 .modal { position: fixed; inset: 0; z-index: 20; background: rgba(10,14,18,.55);
   display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -230,16 +246,18 @@ html, body { margin: 0; height: 100%; }
   max-width: 640px; max-height: 85vh; overflow-y: auto; padding: 24px 28px;
   font-size: 13.5px; color: var(--ink); line-height: 1.55; }
 .modal-card h2 { margin-top: 0; font-size: 19px; font-weight: 650;
-  letter-spacing: -.01em; }
-.modal-card h3 { font-size: 14px; font-weight: 650; }
-.modal-card a { color: var(--accent-text); }
-.modal-close { position: absolute; top: 10px; right: 14px; border: none;
-  background: none; font-size: 24px; cursor: pointer; color: var(--muted); }
+  letter-spacing: -.01em; color: var(--ink); }
+.modal-card h3 { font-size: 14px; font-weight: 650; color: var(--ink); }
+.modal-close { position: absolute; top: 10px; right: 14px; width: auto;
+  margin: 0; padding: 0 4px; border: none; background: none;
+  font-size: 24px; color: var(--muted); }
 .fine { color: var(--muted); font-size: 12px; }
 .pop-fine { color: #59636e; font-size: 11.5px; }
 
-/* MapLibre chrome: popups and attribution keep light cards in both
-   schemes, so pin dark ink and readable link color on them. */
+/* --------------------------- MapLibre chrome --------------------------- */
+
+/* Popups and attribution keep light cards in both schemes, so pin dark
+   ink and a readable link color on them. */
 .maplibregl-popup-content { font-size: 12.5px; color: #1f2328;
   font-family: var(--font-ui); line-height: 1.45; }
 .maplibregl-popup-content a { color: #0f766e; }
@@ -255,26 +273,13 @@ html, body { margin: 0; height: 100%; }
   background: rgba(255, 255, 255, .85); color: #1f2328;
   border-color: #1f2328;
 }
-
-/* Small hover tooltip for state status */
 .state-tip .maplibregl-popup-content { padding: 6px 10px; }
 
-/* ------------------------------ FAQ page ------------------------------- */
-body.page { position: static; height: auto; background: var(--bg);
-  color: var(--ink); padding: 40px 20px 64px; max-width: 720px;
-  margin-inline: auto; font-size: 15px; line-height: 1.65;
-  font-family: var(--font-ui); }
-.page header { margin-bottom: 28px; }
-.page h1 { font-size: 26px; font-weight: 700; margin: 0 0 4px;
-  letter-spacing: -.015em; }
-.page .tagline { color: var(--muted); margin: 0; font-size: 14px; }
-.page h2 { font-size: 17px; font-weight: 650; margin: 30px 0 8px;
-  letter-spacing: -.01em; }
-.page a { color: var(--accent-text); }
-.page code { background: var(--card); border: 1px solid var(--border);
-  padding: 0 4px; border-radius: 4px; font-size: 13px;
-  font-family: var(--font-data); }
+/* ------------------------- FAQ page (Pico-led) ------------------------- */
+
+body.page { height: auto; }
 .page .backlink { display: inline-block; margin-bottom: 18px;
   text-decoration: none; border-bottom: 1px dotted var(--accent-text); }
-.page footer { margin-top: 48px; color: var(--muted); font-size: 13px;
+.page .tagline { color: var(--muted); margin-top: -.5rem; }
+.page footer { margin-top: 48px; color: var(--muted); font-size: .85em;
   border-top: 1px solid var(--border); padding-top: 14px; }

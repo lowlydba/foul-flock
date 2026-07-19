@@ -192,14 +192,19 @@ Checks after any rules change:
 
 ## Theming and accessibility (enforced by CI)
 
-- Theme is Foul Flock's own: neutral light/dark schemes driven by
-  prefers-color-scheme, deep teal accent, system sans for UI text and
-  monospace reserved for data (counts, distances, coordinates, code). All
-  chrome colors live in :root CSS variables in web/style.css; edit the
-  variables, not scattered hex values.
-- Contrast rules baked into the palette: --accent (teal) is decorative
-  only; use --accent-text for link/button text. Same split for status
-  colors: --flagged (dot fill) vs --flagged-ink (text/badges). MapLibre
+- Theme sits on Pico CSS (classless build, vendored at
+  web/assets/pico.classless.min.css, loaded before style.css): Pico owns
+  base typography, links, buttons, form controls, details, and the
+  light/dark switch. style.css owns the theme tokens (fonts + teal accent
+  set via --pico-* variables in :root, dark overrides mirror Pico's
+  `:root:not([data-theme=light])` selector) and the map chrome. To
+  restyle, change the --pico-* variables; don't reintroduce base-element
+  CSS. To update Pico, re-download the classless build and rerun the axe
+  suite.
+- Contrast rules baked into the palette: Pico's primary (teal) carries
+  links/buttons; status colors split decorative vs ink (--flagged dot
+  fill vs --flagged-ink text/badges; --flagcard-muted exists because
+  Pico's dark muted misses AA on the match-card background). MapLibre
   popups and the attribution bar stay light in both schemes, so their ink
   is pinned dark in CSS.
 - WCAG 2.1 A/AA is asserted by axe-core + Playwright: `npm ci`,
