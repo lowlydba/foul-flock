@@ -1,0 +1,93 @@
+name: ci
+
+# Test suite: pytest for the Python build pipeline, and WCAG 2.1 A/AA
+# regression checks (axe-core via Playwright) against the static site in
+# light and dark color schemes. The axe job uses committed fixture data in
+# tests/fixtures/data since real build artifacts are gitignored.
+# The are-we-good job is the single check to require in branch protection.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only suite: checks out code and runs tests, writes nothing.
+permissions:
+  contents: read # check out the repository
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: Python build pipeline tests
+    runs-on: ubuntu-slim
+    steps:
+      - name: Check out
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install test dependencies
+        run: pip install -r tests/python/requirements.txt
+
+      - name: Run pytest
+        run: python -m pytest tests/python -q
+
+  axe:
+    name: Axe WCAG scan
+    runs-on: ubuntu-slim
+    steps:
+      - name: Check out
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Tune npm for CI
+        uses: lowlydba/sustainable-npm@31d51025884f424f58f22e4e6578178bb4e79632 # v3.0.0
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Stage fixture data
+        run: |
+          mkdir -p web/data
+          cp tests/fixtures/data/* web/data/
+
+      - name: Run axe WCAG tests
+        run: npx playwright test
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  are-we-good:
+    name: Are we good?
+    runs-on: ubuntu-slim
+    needs: [pytest, axe]
+    if: always()
+    steps:
+      - name: Roll up job results
+        uses: lowlydba/are-we-good@4b62765391e357e78d0572113ab8b1c7d6b8d12a # v1.0.4
+        with:
+          jobs: ${{ toJSON(needs) }}

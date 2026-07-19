@@ -1,0 +1,5 @@
+# Dependencies for the Python unit tests (tests/python).
+# The tests exercise build/build.py's offline paths only, so overturemaps
+# is deliberately not required here.
+pyyaml==6.0.3
+pytest==9.1.1

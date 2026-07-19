@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- don't worry, no trackers here :) -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Foul Flock · ALPR Siting Compliance Map</title>
+  <meta name="description" content="Cross-references crowdsourced ALPR camera locations against state camera-siting statutes. A screening tool, not legal advice." />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#14181d" media="(prefers-color-scheme: dark)" />
+  <link rel="canonical" href="https://www.foulflock.com/" />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="assets/og-image.png" />
+  <meta property="og:title" content="Foul Flock · ALPR Siting Compliance Map" />
+  <meta property="og:description" content="Where do ALPR cameras sit relative to state siting laws? A heuristic screening map." />
+  <meta property="og:url" content="https://www.foulflock.com/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://www.foulflock.com/assets/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:site_name" content="Foul Flock" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Foul Flock · ALPR Siting Compliance Map" />
+  <meta name="twitter:description" content="Where do ALPR cameras sit relative to state siting laws? A heuristic screening map." />
+  <meta name="twitter:image" content="https://www.foulflock.com/assets/og-image.png" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="map"></div>
+
+  <header id="topbar">
+    <h1>Foul Flock<span class="ff-sub">checks license-plate cameras against state placement laws</span></h1>
+      <span id="stats">loading…</span>
+      <a id="faq-link" href="faq.html">How &amp; why</a>
+      <button id="about-btn" title="About &amp; disclaimers">About</button>
+  </header>
+
+  <aside id="legend">
+      <div class="legend-title">Legend</div>
+      <div class="row"><span class="dot flagged"></span> Flagged <em>· verify before acting</em></div>
+      <div class="row"><span class="dot clear"></span> Nothing found</div>
+      <div class="row"><span class="dot excluded"></span> Possibly exempt device</div>
+      <div class="row"><span class="swatch law"></span> Siting law in effect</div>
+      <div class="row"><span class="swatch nolaw"></span> No siting law</div>
+      <div class="row"><span class="icon-chip" style="background:#c2620d" aria-hidden="true"></span> Protected places <em>· zoom in</em></div>
+      <div class="buffer-row">
+        <label for="buffer-slider">"Close by" radius</label>
+        <input type="range" id="buffer-slider" min="50" max="400" step="25" value="100" />
+        <output id="buffer-value" for="buffer-slider">100 m</output>
+      </div>
+      <div class="buffer-row">
+        <label for="onprem-slider">"On premises" radius</label>
+        <input type="range" id="onprem-slider" min="10" max="150" step="10" value="50" />
+        <output id="onprem-value" for="onprem-slider">50 m</output>
+      </div>
+      <details id="method-notes">
+        <summary>Method notes</summary>
+        <div id="buffer-note"></div>
+      </details>
+  </aside>
+
+  <!-- Camera detail / report panel -->
+  <aside id="detail" class="hidden">
+    <button id="detail-close" aria-label="Close">&times;</button>
+    <div id="detail-body"></div>
+  </aside>
+
+  <!-- About / disclaimers modal -->
+  <div id="about" class="modal hidden">
+    <div class="modal-card">
+      <button class="modal-close" aria-label="Close">&times;</button>
+      <h2>About this tool</h2>
+      <p class="fine">New here? The <a href="faq.html">How &amp; why page</a> explains
+      everything in plain English.</p>
+      <p>Foul Flock cross-references crowdsourced ALPR camera locations
+      (OpenStreetMap / <a href="https://deflock.me" target="_blank" rel="noopener">DeFlock</a> tagging)
+      against a hand-curated table of state camera-siting statutes, and flags
+      cameras within a screened distance of a protected place: schools,
+      places of worship, healthcare facilities, courts, food banks.</p>
+
+      <h3>⚠️ Read before acting on anything here</h3>
+      <ul>
+        <li><strong>This is not legal advice.</strong> It's a place to start
+            research, not to end it.</li>
+        <li><strong>The data can be wrong.</strong> Camera positions are
+            crowdsourced: cameras move, get removed, get mis-tagged. Place
+            data has the same problem.</li>
+        <li><strong>Some distances are guesses.</strong> When a law says
+            "immediately surrounding" instead of giving a number, this map
+            substitutes an adjustable radius and labels it. That number is
+            ours, not the law's.</li>
+        <li><strong>Statutes change.</strong> Check the citation and the
+            effective date, then read the current text yourself.</li>
+        <li><strong>Verify before you file.</strong> In person, or through
+            imagery and public records, before contacting any agency.</li>
+      </ul>
+
+      <h3>How to act on a flag</h3>
+      <ol>
+        <li>Click a flagged camera and review the statute citation and distance.</li>
+        <li>Confirm the camera and the protected place actually exist where mapped.</li>
+        <li>Read the statute at the linked source. Confirm it's in effect and applies.</li>
+        <li>Use "Draft report" for a starting-point letter (records request /
+            relocation request), then replace its contents with facts you've
+            verified yourself.</li>
+      </ol>
+      <p class="fine">Static site; no tracking, no backend. Camera data &copy; OpenStreetMap
+      contributors (ODbL). Protected places and state boundaries &copy;
+      <a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps Foundation</a>
+      (places: CDLA-Permissive-2.0; divisions contain OSM data, ODbL). Made by
+      <a href="https://github.com/lowlydba" target="_blank" rel="noopener">lowlydba</a>.</p>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

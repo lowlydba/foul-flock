@@ -1,0 +1,89 @@
+name: data-refresh
+
+# Unattended refresh of the data sources: ALPR cameras from OSM/Overpass
+# (DeFlock tagging, mirror rotation + backoff built into the build script)
+# weekly, plus Overture places and divisions (anonymous S3 reads, no
+# credentials) monthly, matching Overture's monthly release cadence.
+# --refresh <scope> busts the matching cache entries; actions/cache is
+# deliberately not used here because stale intermediates would defeat the
+# point of the refresh. The regenerated web/data/* (gitignored on dev
+# machines) is force-added and pushed to a fixed branch as an auto-PR.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # weekly, Mondays 06:17 UTC: cameras only
+    - cron: "17 7 3 * *" # monthly, 3rd at 07:17 UTC: full refresh
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Refresh scope (all | cameras | places | divisions | comma-separated)"
+        default: "all"
+        required: false
+
+# No workflow-level grants; the refresh job declares what it needs.
+permissions: {}
+
+concurrency:
+  group: data-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Rebuild and publish data
+    runs-on: ubuntu-slim
+    timeout-minutes: 60
+    permissions:
+      contents: write # push the auto/data-refresh branch
+      pull-requests: write # open or update the refresh pull request
+    steps:
+      - name: Check out
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: pip install -r build/requirements.txt
+
+      - name: Determine refresh scope
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          DISPATCH_SCOPE: ${{ github.event.inputs.scope }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "scope=${DISPATCH_SCOPE:-all}" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_SCHEDULE" = "17 6 * * 1" ]; then
+            echo "scope=cameras" >> "$GITHUB_OUTPUT"
+          else
+            echo "scope=all" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rebuild data (fresh fetch for scope)
+        env:
+          SCOPE: ${{ steps.scope.outputs.scope }}
+        run: python build/build.py --refresh "$SCOPE"
+
+      - name: Open or update refresh PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCOPE: ${{ steps.scope.outputs.scope }}
+        run: |
+          gh auth setup-git
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B auto/data-refresh
+          git add -f web/data
+          git commit -m "Data refresh ($SCOPE): $(date -u +%F)"
+          git push -f origin auto/data-refresh
+          if [ -z "$(gh pr list --head auto/data-refresh --state open --json number --jq '.[].number')" ]; then
+            gh pr create \
+              --head auto/data-refresh \
+              --title "Scheduled data refresh $(date -u +%F)" \
+              --body "Automated rebuild of web/data/* from live sources (scope: $SCOPE). Review the flagged-count delta in the build log before merging."
+          fi
