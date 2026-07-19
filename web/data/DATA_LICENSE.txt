@@ -1,0 +1,18 @@
+Data licenses for the files in this directory
+
+cameras.geojson, view_cones.geojson:
+  Derived from OpenStreetMap. (c) OpenStreetMap contributors,
+  Open Database License (ODbL) 1.0. https://www.openstreetmap.org/copyright
+
+states.geojson:
+  Derived from the Overture Maps divisions theme, which contains
+  OpenStreetMap data. (c) Overture Maps Foundation, ODbL 1.0.
+
+places.geojson:
+  Derived from the Overture Maps places theme. (c) Overture Maps
+  Foundation, CDLA-Permissive-2.0.
+  https://cdla.dev/permissive-2-0/
+
+rules.json:
+  Hand-curated by the project (see repository LICENSE). Statutory
+  quotes are public records.
