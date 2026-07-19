@@ -1,0 +1,42 @@
+name: Bug report
+description: Something on the map or site is broken or behaving unexpectedly.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For wrong or missing **camera locations**, note that camera data comes from
+        OpenStreetMap - the best fix is editing OSM directly, but a report here is
+        still welcome so we can verify the next data refresh picks it up.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. See ...
+  - type: input
+    id: location
+    attributes:
+      label: Where on the map?
+      description: State, city, or a specific camera/place if relevant.
+      placeholder: e.g. Seattle, WA - flagged camera near Ballard High School
+  - type: input
+    id: environment
+    attributes:
+      label: Browser / device
+      placeholder: e.g. Firefox 141 on Windows, Safari on iPhone
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots, console errors, or other context.
