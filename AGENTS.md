@@ -244,9 +244,11 @@ Checks after any rules change:
     install.
   - `lowlydba/are-we-good` is the final rollup job in the a11y workflow;
     require that single check in branch protection, not per-job checks.
-- Production domain is www.foulflock.com (root CNAME file, owned upstream,
-  plus canonical/OG tags in index.html). The root index.html holding page
-  will be replaced by the web/ app when Pages deployment is wired up.
+- Production domain is www.foulflock.com (canonical/OG tags in
+  web/index.html). Deployment: .github/workflows/deploy.yml publishes web/
+  as the Pages site root (workflow build type; the custom domain lives in
+  the repo's Pages settings, not a CNAME file) on pushes to main touching
+  web/**, so merging a data-refresh auto-PR redeploys the site.
 - SEO assets live in web/assets/: favicon.svg, og-image.png (1200x630,
   referenced by og:image/twitter:image meta and the README hero), and
   og-template.html (the source; re-render with a 1200x630 Playwright
