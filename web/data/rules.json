@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-08-10T06:59:26.484233+00:00",
+ "generated_at": "2026-08-24T06:35:10.894458+00:00",
  "default_heuristic_buffer_m": 100,
  "heuristic_scan_max_m": 400,
  "sliders": {
@@ -24,9 +24,9 @@
   "VA",
   "WA"
  ],
- "camera_count": 5413,
- "flagged_count": 411,
- "match_count": 551,
+ "camera_count": 5572,
+ "flagged_count": 454,
+ "match_count": 622,
  "rules": [
   {
    "rule_id": "WA-SB6002-schools",
