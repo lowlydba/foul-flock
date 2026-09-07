@@ -2,4 +2,4 @@
 # overturemaps (and its transitive shapely/pyarrow) is only imported for
 # non-cached fetches; --offline builds need just pyyaml.
 pyyaml==6.0.3
-overturemaps==1.0.1
+overturemaps==1.0.2
