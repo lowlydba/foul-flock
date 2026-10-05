@@ -57,7 +57,7 @@ jobs:
           cache: npm
 
       - name: Tune npm for CI
-        uses: lowlydba/sustainable-npm@31d51025884f424f58f22e4e6578178bb4e79632 # v3.0.0
+        uses: lowlydba/sustainable-npm@4cc1da285e5a589a7b3816122f791c21ec6ff3e6 # v4.0.0
 
       - name: Install dependencies
         run: npm ci
@@ -88,6 +88,6 @@ jobs:
     if: always()
     steps:
       - name: Roll up job results
-        uses: lowlydba/are-we-good@0f90ea9fa5e47188fcb69d9306fb8b3abb656018 # v1.2.0
+        uses: lowlydba/are-we-good@6b10e5f2697555fbaf7f8f37ce38d4454c954a4c # v1.2.2
         with:
           jobs: ${{ toJSON(needs) }}
