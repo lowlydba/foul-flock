@@ -129,6 +129,24 @@ for (const fontScale of [1, 2]) {
   });
 }
 
+test("guideline camera detail panel has a banner, no report letter, and no a11y errors", HARD_TIMEOUT, async () => {
+  const opened = await page.evaluate(async () => {
+    const gj = await (await fetch("data/cameras.geojson")).json();
+    const hits = gj.features.filter((f) => f.properties.status === "guideline");
+    hits.forEach((f) => window.__ff.openDetail(f));
+    return hits.length;
+  });
+  assert.ok(opened > 1, "fixture data must include guideline cameras");
+  assert.ok(await page.$(".guideline-banner"));
+  assert.equal((await page.$$(".report-btn")).length, 0);
+  const results = await pa11y(base, {
+    browser, page, ignoreUrl: true,
+    runners: ["axe"], standard: "WCAG2AA",
+    levelCapWhenNeedsReview: "warning",
+  });
+  assert.deepEqual(results.issues.filter((issue) => issue.type === "error"), []);
+});
+
 for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
   test(`zoom-out stops at the US footprint at ${viewport.width}px wide`, HARD_TIMEOUT, async () => {
     await page.setViewport(viewport);
