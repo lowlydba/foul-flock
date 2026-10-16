@@ -260,15 +260,21 @@ Checks after any rules change:
   Pico's dark muted misses AA on the match-card background). MapLibre
   popups and the attribution bar stay light in both schemes, so their ink
   is pinned dark in CSS.
-- WCAG 2.1 A/AA is asserted by axe-core + Playwright: `npm ci`,
-  `npx playwright install chromium`, then `npm run test:a11y`. Tests run in
-  light AND dark schemes and cover the base chrome, legend, About modal,
-  and the flagged-camera detail/report flow (via the window.__ff test hook
-  at the bottom of app.js).
+- WCAG 2.1 A/AA is asserted by axe-core via pa11y-ci (config in
+  .pa11yci.cjs): `npm ci`, serve web/ with `node tests/serve.cjs 8081 web`,
+  then `npm run test:a11y`. Set `A11Y_SCHEME=dark` for the dark scheme
+  (light is the default); CI runs both. It scans the home page and
+  faq.html at load, so interactive states (About modal, detail panel,
+  report letter) aren't covered.
+- `npm run test:map` runs Node/Puppeteer regression tests against the same
+  server for popup text scaling, dismissal, popup accessibility, and
+  viewport-aware zoom limits. Popups render the same in both schemes, so
+  CI runs it once (light job).
 - CI: .github/workflows/ci.yml runs pytest (tests/python, offline unit
   tests for build.py: geometry, taxonomy mapping, matching, cache/refresh,
-  emit) and the axe suite on push/PR, rolled into one required check via
-  are-we-good. The axe job uses fixture data in tests/fixtures/data (real
+  emit) and the pa11y suite (lowlysre/pa11y-ci-action) on push/PR, rolled
+  into one required check via are-we-good. The pa11y job uses fixture data
+  in tests/fixtures/data (real
   web/data is gitignored). If you change the data schema, regenerate
   fixtures from a fresh build: keep a couple of cameras per status,
   matching view cones, a few places, WA/VA/OR states, and the current
@@ -289,10 +295,10 @@ Checks after any rules change:
   - Permissions are minimal, declared at the tightest level, and each
     grant carries a trailing `# why` comment.
   - Every workflow has a `concurrency` group; every job has a `name`.
-  - Runners: `ubuntu-slim` everywhere except the zizmor job
-    (`ubuntu-latest`). Playwright's webServer is the dependency-free
-    tests/serve.cjs (node), so the suite doesn't assume python exists on
-    slim runners.
+  - Runners: `ubuntu-slim` everywhere except the zizmor and pa11y jobs
+    (`ubuntu-latest`; slim lacks Chromium's system libraries). The pa11y
+    job's static server is the dependency-free tests/serve.cjs (node), so
+    the suite doesn't assume python exists.
   - `lowlydba/sustainable-npm` runs after setup-node, before any npm
     install.
   - `lowlydba/are-we-good` is the final rollup job in the a11y workflow;

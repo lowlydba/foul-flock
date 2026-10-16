@@ -5,6 +5,8 @@
 Live at [www.foulflock.com](https://www.foulflock.com). Made by
 [lowlydba](https://github.com/lowlydba).
 
+![A flagged camera in Spokane, WA, with the legend and the matched protected places](docs/images/flagged-camera.png)
+
 A small, fully static map that cross-references crowdsourced ALPR camera
 locations (OpenStreetMap, [DeFlock](https://deflock.me) tagging convention)
 against a hand-curated table of **state camera-siting statutes**, and flags
@@ -111,7 +113,7 @@ monthly release cadence), then opens a PR with the regenerated
 ### Tests
 
 The Python build pipeline is unit-tested with pytest, and WCAG 2.1 A/AA is
-asserted with axe-core + Playwright in both light and dark color schemes
+asserted with axe-core via pa11y-ci in both light and dark color schemes
 (see AGENTS.md for the theming rules):
 
 ```powershell
@@ -119,11 +121,16 @@ pip install -r tests\python\requirements.txt
 python -m pytest tests\python
 
 npm ci
-npx playwright install chromium
+node tests\serve.cjs 8081 web      # in a second terminal
+$env:A11Y_SCHEME = "dark"          # or "light" (default)
 npm run test:a11y
+npm run test:map
 ```
 
-CI runs both suites on every push/PR (`.github/workflows/ci.yml`, axe
+Popup sizing, dismissal, and viewport-aware zoom limits have browser regression tests through Node's test runner and Puppeteer.
+
+CI runs these suites on every push/PR (`.github/workflows/ci.yml`, pa11y-ci
+via [lowlysre/pa11y-ci-action](https://github.com/lowlysre/pa11y-ci-action)
 against fixture data in `tests/fixtures/data`) and rolls them into a
 single required check. Workflow security is linted by zizmor at its
 pedantic persona (`.github/workflows/zizmor.yml`), and dependabot watches

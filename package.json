@@ -4,10 +4,12 @@
   "version": "0.1.0",
   "description": "ALPR siting compliance map - accessibility test harness",
   "scripts": {
-    "test:a11y": "playwright test"
+    "test:a11y": "pa11y-ci --config .pa11yci.cjs",
+    "test:map": "node --test tests/map.test.cjs"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.13.0",
-    "@playwright/test": "^1.63.0"
+    "pa11y-ci": "4.1.1",
+    "pa11y": "9.1.1",
+    "puppeteer": "^24.37.5"
   }
 }
