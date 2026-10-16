@@ -113,9 +113,12 @@ npm ci
 node tests\serve.cjs 8081 web      # in a second terminal
 $env:A11Y_SCHEME = "dark"          # or "light" (default)
 npm run test:a11y
+npm run test:map
 ```
 
-CI runs both suites on every push/PR (`.github/workflows/ci.yml`, pa11y-ci
+Popup sizing, keyboard dismissal, and viewport-aware zoom limits have browser regression tests through Node's test runner and Puppeteer.
+
+CI runs these suites on every push/PR (`.github/workflows/ci.yml`, pa11y-ci
 via [lowlysre/pa11y-ci-action](https://github.com/lowlysre/pa11y-ci-action)
 against fixture data in `tests/fixtures/data`) and rolls them into a
 single required check. Workflow security is linted by zizmor at its

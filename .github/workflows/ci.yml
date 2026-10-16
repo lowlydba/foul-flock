@@ -77,6 +77,13 @@ jobs:
           echo "Static server did not start" >&2
           exit 1
 
+      - name: Run map regression tests
+        env:
+          A11Y_SCHEME: ${{ matrix.scheme }}
+        run: |
+          npm ci
+          npm run test:map
+
       - name: Run pa11y-ci
         id: pa11y
         uses: lowlysre/pa11y-ci-action@84174759cd514bd3ea3bcaa30dc1798dde81f713 # v1.1.0
