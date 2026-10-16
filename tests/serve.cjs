@@ -1,5 +1,5 @@
-// Dependency-free static file server for Playwright's webServer, so the
-// a11y suite doesn't assume python exists on the runner (ubuntu-slim).
+// Dependency-free static file server for the a11y scan, so it doesn't
+// assume python exists on the runner (ubuntu-slim).
 // Usage: node tests/serve.cjs [port] [rootDir]
 const http = require("http");
 const fs = require("fs");
