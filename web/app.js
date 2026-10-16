@@ -93,6 +93,13 @@ const map = new maplibregl.Map({
       'Made by <a href="https://github.com/lowlydba" target="_blank" rel="noopener">lowlydba</a>',
   },
 });
+const US_BOUNDS = [[-188, 18.5], [-66.5, 72]];
+function updateMinZoom() {
+  const camera = map.cameraForBounds(US_BOUNDS);
+  if (camera) map.setMinZoom(camera.zoom);
+}
+updateMinZoom();
+map.on("resize", updateMinZoom);
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "bottom-right");
 map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: "metric" }), "bottom-left");
 map.addControl(new maplibregl.FullscreenControl(), "bottom-right");
