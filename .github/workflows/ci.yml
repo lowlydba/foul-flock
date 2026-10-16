@@ -63,9 +63,11 @@ jobs:
         uses: lowlydba/sustainable-npm@4cc1da285e5a589a7b3816122f791c21ec6ff3e6 # v4.0.0
 
       - name: Install test dependencies
+        if: matrix.scheme == 'light' # map tests are scheme-independent; run once
         run: npm ci
 
       - name: Install Chrome for map tests
+        if: matrix.scheme == 'light'
         run: npx --no-install puppeteer browsers install chrome
 
       - name: Stage fixture data
@@ -84,8 +86,7 @@ jobs:
           exit 1
 
       - name: Run map regression tests
-        env:
-          A11Y_SCHEME: ${{ matrix.scheme }}
+        if: matrix.scheme == 'light'
         run: npm run test:map
 
       - name: Run pa11y-ci

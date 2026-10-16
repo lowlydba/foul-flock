@@ -214,9 +214,9 @@ Checks after any rules change:
   faq.html at load, so interactive states (About modal, detail panel,
   report letter) aren't covered.
 - `npm run test:map` runs Node/Puppeteer regression tests against the same
-  server for popup text scaling, focus, dismissal, popup accessibility,
-  and viewport-aware zoom limits. `A11Y_SCHEME` selects the color scheme;
-  CI runs both.
+  server for popup text scaling, dismissal, popup accessibility, and
+  viewport-aware zoom limits. Popups render the same in both schemes, so
+  CI runs it once (light job).
 - CI: .github/workflows/ci.yml runs pytest (tests/python, offline unit
   tests for build.py: geometry, taxonomy mapping, matching, cache/refresh,
   emit) and the pa11y suite (lowlysre/pa11y-ci-action) on push/PR, rolled

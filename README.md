@@ -116,7 +116,7 @@ npm run test:a11y
 npm run test:map
 ```
 
-Popup sizing, keyboard dismissal, and viewport-aware zoom limits have browser regression tests through Node's test runner and Puppeteer.
+Popup sizing, dismissal, and viewport-aware zoom limits have browser regression tests through Node's test runner and Puppeteer.
 
 CI runs these suites on every push/PR (`.github/workflows/ci.yml`, pa11y-ci
 via [lowlysre/pa11y-ci-action](https://github.com/lowlysre/pa11y-ci-action)
