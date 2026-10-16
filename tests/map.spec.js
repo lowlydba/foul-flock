@@ -15,17 +15,30 @@ test.beforeEach(async ({ page }) => {
 
 for (const fontScale of [1, 2]) {
   test(`popup close control stays compact at ${fontScale * 100}% text size`, async ({ page }) => {
-    await page.evaluate((scale) => {
-      document.documentElement.style.fontSize = `${scale * 100}%`;
+    await page.evaluate(() => {
       new maplibregl.Popup()
         .setLngLat(window.__ff.map.getCenter())
         .setHTML("<b>Midlothian Middle School</b><br>Protected category: School")
         .addTo(window.__ff.map);
-    }, fontScale);
+    });
 
     const popup = page.locator(".maplibregl-popup-content");
     const close = popup.getByRole("button", { name: "Close popup" });
     await expect(close).toBeVisible();
+    await expect(popup).toHaveCSS("font-size", "12.5px");
+    await expect(close).toHaveCSS("font-size", "20px");
+    if (fontScale !== 1) {
+      await popup.evaluate((el, scale) => {
+        const button = el.querySelector(".maplibregl-popup-close-button");
+        const contentSize = parseFloat(getComputedStyle(el).fontSize);
+        const buttonSize = parseFloat(getComputedStyle(button).fontSize);
+        el.style.fontSize = `${contentSize * scale}px`;
+        button.style.fontSize = `${buttonSize * scale}px`;
+      }, fontScale);
+    }
+    await expect(popup).toHaveCSS("font-size", `${12.5 * fontScale}px`);
+    await expect(popup.locator("b")).toHaveCSS("font-size", `${12.5 * fontScale}px`);
+    await expect(close).toHaveCSS("font-size", `${20 * fontScale}px`);
     const buttonBox = await close.boundingBox();
     expect(buttonBox.width).toBe(24);
     expect(buttonBox.height).toBe(24);
