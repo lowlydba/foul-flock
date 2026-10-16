@@ -1,8 +1,8 @@
 name: ci
 
 # Test suite: pytest for the Python build pipeline, and WCAG 2.1 A/AA
-# regression checks (axe-core via Playwright) against the static site in
-# light and dark color schemes. The axe job uses committed fixture data in
+# regression checks (axe-core via pa11y-ci) against the static site in
+# light and dark color schemes. The pa11y job uses committed fixture data in
 # tests/fixtures/data since real build artifacts are gitignored.
 # The are-we-good job is the single check to require in branch protection.
 
@@ -41,9 +41,13 @@ jobs:
       - name: Run pytest
         run: python -m pytest tests/python -q
 
-  axe:
-    name: Axe WCAG scan
-    runs-on: ubuntu-slim
+  pa11y:
+    name: Pa11y WCAG scan (${{ matrix.scheme }})
+    runs-on: ubuntu-latest # Chromium needs system libraries ubuntu-slim lacks
+    strategy:
+      fail-fast: false
+      matrix:
+        scheme: [light, dark]
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,37 +58,45 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
-          cache: npm
 
       - name: Tune npm for CI
         uses: lowlydba/sustainable-npm@4cc1da285e5a589a7b3816122f791c21ec6ff3e6 # v4.0.0
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
 
       - name: Stage fixture data
         run: |
           mkdir -p web/data
           cp tests/fixtures/data/* web/data/
 
-      - name: Run axe WCAG tests
-        run: npx playwright test
+      - name: Start static server
+        run: |
+          node tests/serve.cjs 8081 web &
+          for _ in $(seq 30); do
+            curl --fail --silent --output /dev/null http://127.0.0.1:8081/ && exit 0
+            sleep 1
+          done
+          echo "Static server did not start" >&2
+          exit 1
 
-      - name: Upload report on failure
-        if: failure()
+      - name: Run pa11y-ci
+        id: pa11y
+        uses: lowlysre/pa11y-ci-action@84174759cd514bd3ea3bcaa30dc1798dde81f713 # v1.1.0
+        env:
+          A11Y_SCHEME: ${{ matrix.scheme }}
+        with:
+          config: .pa11yci.cjs
+
+      - name: Upload report
+        if: ${{ !cancelled() && steps.pa11y.outputs.report-json != '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: playwright-report
-          path: playwright-report/
+          name: pa11y-report-${{ matrix.scheme }}
+          path: ${{ steps.pa11y.outputs.report-json }}
           retention-days: 7
 
   are-we-good:
     name: Are we good?
     runs-on: ubuntu-slim
-    needs: [pytest, axe]
+    needs: [pytest, pa11y]
     if: always()
     steps:
       - name: Roll up job results
