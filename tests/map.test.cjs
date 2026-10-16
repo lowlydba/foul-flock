@@ -39,8 +39,10 @@ beforeEach(async () => {
   await page.goto(base);
   await page.waitForFunction(() =>
     Boolean(window.__ff) && !/loading/i.test(document.getElementById("stats").textContent) &&
-    window.__ff.map.loaded() && !window.__ff.map.isMoving()
+    window.__ff.map.isStyleLoaded()
   );
+  // Basemap tiles come from the network, so map.loaded() can stall on CI; halt the intro fitBounds instead.
+  await page.evaluate(() => window.__ff.map.stop());
 });
 afterEach(async () => {
   if (page) await page.close();
