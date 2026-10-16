@@ -129,6 +129,12 @@ def test_rejects_duplicate_rule_ids(build_mod, doc):
     assert "duplicate rule_id" in problems(build_mod, doc)
 
 
+@pytest.mark.parametrize("bad", [None, "", "  ", 7])
+def test_requires_nonempty_rule_id(build_mod, doc, bad):
+    doc["rules"][0]["rule_id"] = bad
+    assert "rule_id must be a nonempty string" in problems(build_mod, doc)
+
+
 def test_loader_exits_with_all_problems(build_mod, tmp_path, doc):
     rule(doc, "WA-SB6002-schools")["buffer_meters"] = 100
     doc["schema_version"] = 1

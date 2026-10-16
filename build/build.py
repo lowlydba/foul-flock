@@ -144,7 +144,7 @@ def validate_rules_doc(doc: dict, taxonomy: dict | None = None) -> list[str]:
             errs.append(f"category_overture_mapping {cat}: needs at least one anchor")
         for a in anchors or []:
             if isinstance(a, dict) and (
-                    set(a) - {"code", "descendants"}
+                    set(a) - {"code", "descendants", "name_pattern"}
                     or not isinstance(a.get("descendants", True), bool)):
                 errs.append(f"category_overture_mapping {cat}: bad anchor {a!r}")
                 continue
@@ -152,6 +152,13 @@ def validate_rules_doc(doc: dict, taxonomy: dict | None = None) -> list[str]:
                                                   and "code" not in a):
                 errs.append(f"category_overture_mapping {cat}: bad anchor {a!r}")
                 continue
+            if isinstance(a, dict) and "name_pattern" in a:
+                try:
+                    re.compile(a["name_pattern"])
+                except (re.error, TypeError):
+                    errs.append(f"category_overture_mapping {cat}: "
+                                f"bad name_pattern in {a!r}")
+                    continue
             code = anchor_spec(a)[0]
             if taxonomy is not None and code not in taxonomy:
                 errs.append(f"category_overture_mapping {cat}: anchor "
@@ -165,6 +172,9 @@ def validate_rules_doc(doc: dict, taxonomy: dict | None = None) -> list[str]:
 
         def e(msg, rid=rid):
             errs.append(f"{rid}: {msg}")
+
+        if not isinstance(r.get("rule_id"), str) or not r["rule_id"].strip():
+            e("rule_id must be a nonempty string")
 
         if rid in seen:
             e("duplicate rule_id")
@@ -379,8 +389,9 @@ def http_post_overpass(data: str, retries: int = 10,
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 body = resp.read()
             # A timed-out or out-of-memory query still answers 200, with the
-            # failure in a "remark" ahead of a partial or empty result.
-            if b"runtime error" in body[:1000]:
+            # failure in a top-level "remark" beside a partial result.
+            remark = json.loads(body).get("remark", "")
+            if "runtime error" in remark:
                 raise RuntimeError("Overpass runtime error (partial result)")
             return body
         except Exception as e:  # noqa: BLE001
@@ -394,18 +405,20 @@ def http_post_overpass(data: str, retries: int = 10,
 
 
 def overpass_query(cache_key: str, query: str, offline: bool,
-                   refresh_scope: str | None = "cameras",
+                   refresh_scope: str | tuple[str, ...] | None = "cameras",
                    required: bool = True, timeout: int = 90) -> dict | None:
     """Run an Overpass query with on-disk caching.
 
-    refresh_scope: the --refresh scope that invalidates this cache entry
+    refresh_scope: the --refresh scope(s) that invalidate this cache entry
     (None = never; used for historical as-of snapshots, which can't change).
     required: when False, an offline cache miss returns None instead of
     exiting, for optional guideline data.
     timeout: client read timeout in seconds (heavy queries need more).
     """
     cache_file = CACHE_DIR / f"{cache_key}.json"
-    refresh = refresh_scope is not None and refresh_scope in REFRESH_SCOPES
+    scopes = ({refresh_scope} if isinstance(refresh_scope, str)
+              else set(refresh_scope or ()))
+    refresh = bool(scopes & set(REFRESH_SCOPES))
     if cache_file.exists() and not refresh:
         print(f"    cache hit: {cache_file.name}")
         return json.loads(cache_file.read_text(encoding="utf-8"))
@@ -477,7 +490,8 @@ node(id:{",".join(map(str, chunk))})->.c;
 way(around.c:{buffer_m:g})["highway"]["ref"~"{regex}"];
 out geom;
 """
-        data = overpass_query(name, q, offline, required=False, timeout=330)
+        data = overpass_query(name, q, offline, required=False, timeout=330,
+                              refresh_scope=("cameras", "roads"))
         if data is None:
             return None
         for el in data.get("elements", []):
@@ -676,12 +690,20 @@ def build_category_lookup(cat_mapping: dict[str, list],
     """Expand the curated mapping into a flat Overture-code -> protected
     category dict. A code matches when it or a taxonomy ancestor is a
     subtree anchor (so "elementary_school" matches via "school"), or when
-    it is itself an exact anchor."""
+    it is itself an exact anchor. Anchors with a name_pattern are left to
+    build_name_lookup."""
     subtree, exact = {}, {}  # anchor code -> protected category
     for protected, anchors in cat_mapping.items():
         for a in anchors:
+            if isinstance(a, dict) and "name_pattern" in a:
+                continue
             code, descendants = anchor_spec(a)
             (subtree if descendants else exact)[code] = protected
+    return _expand_anchors(subtree, exact, taxonomy)
+
+
+def _expand_anchors(subtree: dict, exact: dict,
+                    taxonomy: dict[str, list[str]]) -> dict:
     lookup = {}
     for code, chain in taxonomy.items():
         for anchor in chain:
@@ -692,6 +714,25 @@ def build_category_lookup(cat_mapping: dict[str, list],
                 lookup[code] = exact[code]
                 break
     return lookup
+
+
+def build_name_lookup(cat_mapping: dict[str, list],
+                      taxonomy: dict[str, list[str]]) -> dict[str, list]:
+    """Overture code -> [(protected category, compiled regex)] for anchors
+    that also require the place name to match name_pattern. Used where the
+    taxonomy has no code for the protected kind of place."""
+    out: dict[str, list] = defaultdict(list)
+    for protected, anchors in cat_mapping.items():
+        for a in anchors:
+            if not (isinstance(a, dict) and "name_pattern" in a):
+                continue
+            code, descendants = anchor_spec(a)
+            rx = re.compile(a["name_pattern"], re.IGNORECASE)
+            sub, ex = ({code: protected}, {}) if descendants else (
+                {}, {code: protected})
+            for c in _expand_anchors(sub, ex, taxonomy):
+                out[c].append((protected, rx))
+    return dict(out)
 
 
 def _overture_reader(overture_type: str, bbox: tuple):
@@ -799,7 +840,9 @@ def fetch_division(state_code: str, offline: bool) -> dict:
 def fetch_overture_places(state_code: str, needed_cats: set[str],
                           code_lookup: dict[str, str], division: dict,
                           offline: bool,
-                          known_codes: set[str] | None = None) -> list[dict]:
+                          known_codes: set[str] | None = None,
+                          name_lookup: dict[str, list] | None = None
+                          ) -> list[dict]:
     """Protected places of all needed categories in one state, streamed
     from the Overture places theme and filtered locally.
 
@@ -809,7 +852,11 @@ def fetch_overture_places(state_code: str, needed_cats: set[str],
     known_codes (the vendored taxonomy's codes) lets the stream report
     places whose category the vendored taxonomy doesn't know.
     """
+    name_lookup = name_lookup or {}
     mapping_key = sorted(c for c, p in code_lookup.items() if p in needed_cats)
+    mapping_key += sorted(f"{c}|{p}|{rx.pattern}"
+                          for c, rules in name_lookup.items()
+                          for p, rx in rules if p in needed_cats)
     cache_file = CACHE_DIR / f"overture_places_{state_code}.json"
     if cache_file.exists() and "places" not in REFRESH_SCOPES:
         cached = json.loads(cache_file.read_text(encoding="utf-8"))
@@ -848,13 +895,24 @@ def fetch_overture_places(state_code: str, needed_cats: set[str],
             if known_codes is not None and code and code not in known_codes:
                 unknown[code] += 1
             protected = code_lookup.get(code)
-            if protected is None or protected not in needed_cats:
+            if protected is not None and protected not in needed_cats:
+                protected = None
+            pending = [] if protected else [
+                p for p, _ in name_lookup.get(code, ()) if p in needed_cats]
+            if protected is None and not pending:
                 continue
             geom = shapely.from_wkb(batch.column("geometry")[i].as_py())
             pt = shapely.centroid(geom) if geom.geom_type != "Point" else geom
             if not shapely.contains_xy(shape, pt.x, pt.y):
                 continue
             names = batch.column("names")[i].as_py() or {}
+            if protected is None:
+                label = names.get("primary") or ""
+                protected = next(
+                    (p for p, rx in name_lookup[code]
+                     if p in needed_cats and rx.search(label)), None)
+                if protected is None:
+                    continue
             places.append({
                 "place_id": f"overture-{batch.column('id')[i].as_py()}",
                 "lat": round(pt.y, 7),
@@ -1311,6 +1369,7 @@ def main() -> None:
     rules = rules_doc["statutory_rules"]
     cat_mapping = rules_doc["category_overture_mapping"]
     code_lookup = build_category_lookup(cat_mapping, taxonomy)
+    name_lookup = build_name_lookup(cat_mapping, taxonomy)
     default_buffer = (args.default_buffer
                       if args.default_buffer is not None
                       else rules_doc["default_heuristic_buffer_m"])
@@ -1363,7 +1422,8 @@ def main() -> None:
     for i, st in enumerate(place_states, 1):
         pls = fetch_overture_places(st, needed_cats[st], code_lookup,
                                     divisions[st], args.offline,
-                                    known_codes=set(taxonomy))
+                                    known_codes=set(taxonomy),
+                                    name_lookup=name_lookup)
         by_cat = defaultdict(int)
         for p in pls:
             places_by_cat[p["category"]].append(p)

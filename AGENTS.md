@@ -197,7 +197,9 @@ inconsistent field. The file has two entry lists:
 - `category_overture_mapping` (top level) - protected category -> Overture
   taxonomy anchor codes. A bare code matches itself and every descendant
   (school covers elementary_school); `{code: X, descendants: false}`
-  matches only X. Taxonomy is vendored at
+  matches only X. `{code: X, name_pattern: REGEX}` also requires the place
+  name to match (case-insensitive); use it only where the taxonomy has no
+  code for the protected kind of place. Taxonomy is vendored at
   build/vendor/overture_taxonomy.csv; see build/vendor/README.md before
   changing anchors.
 

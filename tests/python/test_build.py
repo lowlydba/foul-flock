@@ -105,8 +105,20 @@ def test_guideline_categories(lookup):
     assert lookup["abortion_clinic"] == "reproductive_health_clinic"
     assert lookup["reproductive_perinatal_and_womens_care"] == "reproductive_health_clinic"
     assert "obstetrics_and_gynecology" not in lookup
-    assert lookup["immigration_assistance_service"] == "immigrant_services"
+    assert "immigration_assistance_service" not in lookup
     assert "immigration_law" not in lookup
+
+
+def test_name_pattern_anchor(build_mod):
+    taxonomy = {"svc": ["svc"], "kid": ["svc", "kid"], "other": ["other"]}
+    mapping = {"imm": [{"code": "svc", "name_pattern": "immigra|refugee"}]}
+    assert build_mod.build_category_lookup(mapping, taxonomy) == {}
+    names = build_mod.build_name_lookup(mapping, taxonomy)
+    assert set(names) == {"svc", "kid"}
+    cat, rx = names["kid"][0]
+    assert cat == "imm"
+    assert rx.search("Center for Immigrant Development")
+    assert not rx.search("Town Community Center")
 
 
 def test_exact_anchor_does_not_cover_descendants(build_mod):
@@ -383,6 +395,7 @@ def test_overpass_runtime_error_is_retried_not_cached(build_mod, sandbox,
             return False
 
     bodies = [
+        b'{"elements":[{"type":"node","id":9}],"remark":"runtime error: Query ran out of memory"}',
         b'{"version":0.6,"remark":"runtime error: Query timed out","elements":[]}',
         b'{"version":0.6,"elements":[{"type":"node","id":1}]}',
     ]
@@ -394,6 +407,22 @@ def test_overpass_runtime_error_is_retried_not_cached(build_mod, sandbox,
     assert got["elements"] == [{"type": "node", "id": 1}]
     cached = (build_mod.CACHE_DIR / "roads_XX.json").read_text(encoding="utf-8")
     assert "runtime error" not in cached
+
+
+def test_roads_scope_refreshes_cached_road_chunks(build_mod, sandbox,
+                                                 monkeypatch):
+    calls = []
+    monkeypatch.setattr(build_mod, "http_post_overpass",
+                        lambda q, **k: calls.append(q) or b'{"elements":[]}')
+    monkeypatch.setattr(build_mod.time, "sleep", lambda s: None)
+    args = ("roads_XX", "q", False)
+    kw = {"refresh_scope": ("cameras", "roads")}
+    build_mod.overpass_query(*args, **kw)
+    build_mod.overpass_query(*args, **kw)
+    assert len(calls) == 1
+    monkeypatch.setattr(build_mod, "REFRESH_SCOPES", {"roads"})
+    build_mod.overpass_query(*args, **kw)
+    assert len(calls) == 2
 
 
 def test_refresh_roads_scope_bypasses_reuse(build_mod, sandbox, monkeypatch):

@@ -66,7 +66,15 @@ category_overture_mapping:
     - abortion_clinic
     - {code: reproductive_perinatal_and_womens_care, descendants: false}
   immigrant_services:
-    - immigration_assistance_service
+    # The taxonomy has no code for immigrant-serving nonprofits (the
+    # immigration_assistance_service code is private consultants), so these
+    # anchors match only when the place name also matches.
+    - code: social_or_community_service
+      name_pattern: '^(?!.*chamber of commerce).*(immigra|refugee|migrant|asylum|latino|latina|latinx|hispan)'
+    - code: civic_organization
+      name_pattern: '^(?!.*chamber of commerce).*(immigra|refugee|migrant|asylum|latino|latina|latinx|hispan)'
+    - code: cultural_center
+      name_pattern: '^(?!.*chamber of commerce).*(immigra|refugee|migrant|asylum|latino|latina|latinx|hispan)'
 
 # ---------------------------------------------------------------------------
 # Reviewed states: STATUTORY position only (see header). Absence from this
@@ -772,6 +780,7 @@ rules:
       nonprofits from other immigration services, so these are candidates
       only.
     maintainer_notes: >-
-      Statute PDF not readable; per recordinglaw.com. Overture category
-      matching is a proxy (immigration_assistance_service), and coverage of
-      that code is sparse, so this rule can match few or no places.
+      Statute PDF not readable; per recordinglaw.com. Overture has no
+      immigrant-services category, so matching is generic community and
+      civic codes filtered by name keywords (name_pattern); expect misses
+      and false hits.
