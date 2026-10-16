@@ -211,8 +211,8 @@ map.on("load", async () => {
       ],
       "fill-opacity": [
         "match", ["get", "law_status"],
-        "siting_law", 0.38,
-        "guideline", 0.3,
+        "siting_law", 0.16,
+        "guideline", 0.26,
         0.22,
       ],
     },
@@ -329,9 +329,9 @@ map.on("load", async () => {
     paint: {
       "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 4, 12, 8],
       "circle-color": COLORS.flagged,
-      "circle-opacity": 0.9,
-      "circle-stroke-width": 1.2,
-      "circle-stroke-color": "#5e0f0b",
+      "circle-opacity": 1,
+      "circle-stroke-width": 1.6,
+      "circle-stroke-color": "#ffffff",
     },
   });
 
