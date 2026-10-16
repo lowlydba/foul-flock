@@ -43,7 +43,7 @@ jobs:
 
   pa11y:
     name: Pa11y WCAG scan (${{ matrix.scheme }})
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest # Chromium needs system libraries ubuntu-slim lacks
     strategy:
       fail-fast: false
       matrix:
