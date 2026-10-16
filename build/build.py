@@ -748,10 +748,13 @@ def _overture_reader(overture_type: str, bbox: tuple):
         reader = core.record_batch_reader(overture_type, bbox=bbox, stac=True)
     except Exception as e:  # noqa: BLE001
         print(f"    STAC lookup failed ({e}); scanning the full dataset")
+        reader = None
+    if reader is None:
+        # overturemaps also returns None when it fails to build a reader,
+        # so None can't be read as "no data" without a second attempt.
         reader = core.record_batch_reader(overture_type, bbox=bbox)
     if reader is None:
-        print(f"    no Overture {overture_type} files intersect {bbox}")
-        return iter(())
+        sys.exit(f"Overture {overture_type} reader unavailable for {bbox}")
     return reader
 
 

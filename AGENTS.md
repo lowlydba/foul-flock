@@ -297,8 +297,9 @@ Checks after any rules change:
   - Permissions are minimal, declared at the tightest level, and each
     grant carries a trailing `# why` comment.
   - Every workflow has a `concurrency` group; every job has a `name`.
-  - Runners: `ubuntu-slim` everywhere except the zizmor and pa11y jobs
-    (`ubuntu-latest`; slim lacks Chromium's system libraries). The pa11y
+  - Runners: `ubuntu-slim` everywhere except the zizmor, pa11y, and
+    data-refresh jobs (`ubuntu-latest`; slim lacks Chromium's system
+    libraries and caps jobs at 15 minutes). The pa11y
     job's static server is the dependency-free tests/serve.cjs (node), so
     the suite doesn't assume python exists.
   - `lowlydba/sustainable-npm` runs after setup-node, before any npm

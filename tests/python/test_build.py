@@ -474,10 +474,25 @@ def test_overture_reader_uses_stac_and_falls_back(build_mod, monkeypatch):
     assert list(build_mod._overture_reader("place", (0, 0, 1, 1))) == ["batch"]
     assert calls == [True]
 
-    # STAC says nothing intersects: an empty stream, not an error
+    # STAC returns None (reader construction failed): retried without STAC
     calls.clear()
-    fake_reader.result = None
-    assert list(build_mod._overture_reader("place", (0, 0, 1, 1))) == []
+    fake_reader.fail = False
+    results = [None, iter(["batch"])]
+
+    def seq_reader(overture_type, bbox=None, stac=False, **kw):
+        calls.append(stac)
+        return results.pop(0)
+
+    core.record_batch_reader = seq_reader
+    assert list(build_mod._overture_reader("place", (0, 0, 1, 1))) == ["batch"]
+    assert calls == [True, False]
+
+    # no reader on either attempt: the build stops instead of caching nothing
+    calls.clear()
+    core.record_batch_reader = lambda *a, **k: calls.append(1)
+    with pytest.raises(SystemExit, match="reader unavailable"):
+        build_mod._overture_reader("place", (0, 0, 1, 1))
+    core.record_batch_reader = fake_reader
 
     # index unreachable: retried without STAC
     calls.clear()
