@@ -95,6 +95,21 @@ test("about modal", async ({ page }) => {
   expect(violations, pretty(violations)).toEqual([]);
 });
 
+test("guideline camera detail panel", async ({ page }) => {
+  await loadApp(page);
+  const opened = await page.evaluate(async () => {
+    const gj = await (await fetch("data/cameras.geojson")).json();
+    const hits = gj.features.filter((f) => f.properties.status === "guideline");
+    hits.forEach((f) => window.__ff.openDetail(f));
+    return hits.length;
+  });
+  expect(opened, "fixture data must include guideline cameras").toBeGreaterThan(1);
+  await expect(page.locator(".guideline-banner").first()).toBeVisible();
+  await expect(page.locator(".report-btn")).toHaveCount(0);
+  const violations = await scan(page);
+  expect(violations, pretty(violations)).toEqual([]);
+});
+
 test("flagged camera detail panel and report letter", async ({ page }) => {
   await loadApp(page);
   // Deterministically open the detail panel for the first flagged camera

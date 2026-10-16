@@ -48,6 +48,7 @@
   --flagged-ink: #b3261e;
   --clear: #2e7dd1;
   --excluded: #8d6e2f;
+  --guideline: #f2a900;
   --law: #8a3ffc;
   --nolaw: #9aa1a9;
   --warn-bg: #fdf6e0;
@@ -137,8 +138,13 @@ body { padding: 0; }
 #method-notes summary { font-size: 11.5px; color: var(--muted);
   line-height: 1.4; }
 #buffer-note { color: var(--muted); font-size: 11.5px; max-width: 230px;
-  white-space: normal; }
-#buffer-note p { margin: 5px 0; }
+  white-space: normal; max-height: 40vh; overflow-y: auto; }
+#buffer-note dl { margin: 6px 0 0; }
+#buffer-note dt { color: var(--ink); font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .06em; margin: 9px 0 1px; }
+#buffer-note dt:first-child { margin-top: 2px; }
+#buffer-note dd { margin: 0; line-height: 1.45; }
+#buffer-note em { font-size: inherit; color: var(--ink); font-style: italic; }
 #buffer-note code { font-size: 10.5px; padding: 0 3px; }
 
 .dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto;
@@ -146,19 +152,28 @@ body { padding: 0; }
 .dot.flagged { background: var(--flagged); }
 .dot.clear { background: var(--clear); }
 .dot.excluded { background: var(--excluded); }
+.dot.guideline { background: var(--guideline); }
 .swatch { width: 14px; height: 12px; flex: 0 0 auto; border-radius: 3px;
   opacity: .8; border: 1px solid rgba(0,0,0,.3); }
 .swatch.law { background: var(--law); }
+.swatch.guideline { background: var(--guideline); }
 .swatch.nolaw { background: var(--nolaw); }
-.icon-chip { width: 14px; height: 14px; flex: 0 0 auto; border-radius: 50%; }
+.icon-chip { width: 14px; height: 14px; flex: 0 0 auto; border-radius: 4px; }
 
-.buffer-row { display: flex; align-items: center; gap: 6px; margin: 6px 0 2px; }
-.buffer-row:first-of-type {
-  border-top: 1px solid var(--border); padding-top: 8px; margin-top: 8px;
-}
+.legend-sub { font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); font-weight: 600; margin: 9px 0 1px; }
+#legend .legend-title + .legend-group .legend-sub { margin-top: 2px; }
+.legend-swatches { display: flex; flex-wrap: wrap; gap: 0 14px; }
+.radii { margin-top: 9px; border-top: 1px solid var(--border); padding-top: 2px; }
+.radii .legend-sub { margin-top: 6px; }
+
+.buffer-row { display: flex; align-items: center; gap: 6px; margin: 4px 0 2px; }
 .buffer-row label { font-size: 11px; color: var(--muted); margin: 0;
-  white-space: nowrap; width: 106px; }
+  white-space: nowrap; width: 72px; }
 .buffer-row input[type="range"] { flex: 1; min-width: 56px; margin: 0; }
+.buffer-row input[type="range"]::-webkit-slider-thumb {
+  width: 12px; height: 12px; margin-top: -3px; }
+.buffer-row input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; }
 .buffer-row output { font-size: 11.5px; font-weight: 600; min-width: 44px;
   text-align: right; font-family: var(--font-data); }
 
@@ -187,6 +202,13 @@ body { padding: 0; }
 .status-badge.flagged { background: #b3261e; }
 .status-badge.checked_clear { background: #1f5f9e; }
 .status-badge.possible_exclusion { background: #6d5410; }
+.status-badge.guideline { background: #7a4b00; }
+.guideline-banner {
+  margin: 8px 0; padding: 8px 10px; font-size: 12.5px; border-radius: 6px;
+  background: var(--warn-bg); color: var(--warn-ink);
+  border: 1px solid var(--warn-border);
+}
+.guideline-banner.tbd { border-width: 2px; border-color: var(--guideline); }
 .kv { margin: 2px 0; font-family: var(--font-data); font-size: 12.5px; }
 .kv b { color: var(--muted); font-weight: 600; font-family: var(--font-ui); }
 
@@ -204,6 +226,8 @@ body { padding: 0; }
   padding: 1px 6px; margin-left: 6px; vertical-align: middle;
 }
 .match-card .cite { font-size: 12px; color: var(--flagcard-muted); margin-top: 5px; }
+.match-card.guideline { border-left-color: var(--guideline); }
+.match-card.guideline .dist { color: var(--ink); }
 .statute-quote {
   margin: 7px 0 2px; padding: 7px 10px; font-size: 12.5px;
   background: var(--quote-bg); border-left: 3px solid var(--law);
@@ -253,6 +277,7 @@ body { padding: 0; }
   font-size: 24px; color: var(--muted); }
 .fine { color: var(--muted); font-size: 12px; }
 .pop-fine { color: #59636e; font-size: 11.5px; }
+.pop-list { margin: 4px 0; padding-left: 16px; font-size: 11.5px; }
 
 /* --------------------------- MapLibre chrome --------------------------- */
 

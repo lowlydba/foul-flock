@@ -26,7 +26,9 @@ Usage:
                       subset of cameras,places,divisions or "all" (the
                       default when the flag is given bare). Overture only
                       releases monthly, so the scheduled workflow refreshes
-                      cameras weekly and everything else monthly.
+                      cameras weekly and everything else monthly. "roads"
+                      also redoes every state-road lookup instead of reusing
+                      the previous build's; it is not part of "all".
     --states          Restrict build to a subset of rule states.
 """
 
@@ -34,8 +36,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
+import re
 import sys
 import time
 import urllib.request
@@ -56,7 +60,7 @@ sys.stdout.reconfigure(line_buffering=True)
 RULES_FILE = ROOT / "rules" / "alpr_state_rules.yaml"
 CACHE_DIR = ROOT / "cache"
 OUT_DIR = ROOT / "web" / "data"
-TAXONOMY_CSV = Path(__file__).resolve().parent / "vendor" / "overture_categories.csv"
+TAXONOMY_CSV = Path(__file__).resolve().parent / "vendor" / "overture_taxonomy.csv"
 
 OVERPASS_URLS = [
     "https://overpass-api.de/api/interpreter",
@@ -89,6 +93,232 @@ STATE_NAMES = {
 
 EARTH_R = 6371008.8  # meters
 
+# --------------------------------------------------- rules file schema ----
+
+RULES_SCHEMA_VERSION = 2
+AUTHORITIES = {"statute", "executive_action", "statute_pending_distance"}
+MECHANISMS = {"proximity", "road_class"}
+DISTANCE_BASES = {"statutory", "on_premises", "close_by", "tbd"}
+CONFIDENCES = {"verified", "inferred", "needs_review"}
+STATUTE_STATUSES = {"no_siting_law", "no_alpr_statute"}
+SOURCE_TYPES = {"primary", "secondary"}
+PRIVATE_FIELDS = ("maintainer_notes",)
+
+
+def _strings(obj, path=""):
+    if isinstance(obj, str):
+        yield path, obj
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            yield from _strings(v, f"{path}.{k}" if path else str(k))
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            yield from _strings(v, f"{path}[{i}]")
+
+
+def _check_sources(srcs, e):
+    if not isinstance(srcs, list) or not srcs:
+        e("sources must be a non-empty list of {url, type}")
+        return
+    for s in srcs:
+        if not isinstance(s, dict) or not str(s.get("url", "")).startswith("https://"):
+            e(f"source needs an https url: {s!r}")
+        elif s.get("type") not in SOURCE_TYPES:
+            e(f"source type must be one of {sorted(SOURCE_TYPES)}: {s!r}")
+
+
+def validate_rules_doc(doc: dict, taxonomy: dict | None = None) -> list[str]:
+    """Return a list of problems with the rules file (empty = valid).
+    With a taxonomy, also checks every category anchor exists in it."""
+    errs: list[str] = []
+    if doc.get("schema_version") != RULES_SCHEMA_VERSION:
+        errs.append(f"schema_version must be {RULES_SCHEMA_VERSION}")
+    for key in ("default_heuristic_buffer_m", "default_on_premises_m"):
+        v = doc.get(key)
+        if not isinstance(v, (int, float)) or v <= 0:
+            errs.append(f"{key} must be a positive number")
+    mapping = doc.get("category_overture_mapping") or {}
+    cats = set(mapping)
+    for cat, anchors in mapping.items():
+        if not anchors:
+            errs.append(f"category_overture_mapping {cat}: needs at least one anchor")
+        for a in anchors or []:
+            if isinstance(a, dict) and (
+                    set(a) - {"code", "descendants"}
+                    or not isinstance(a.get("descendants", True), bool)):
+                errs.append(f"category_overture_mapping {cat}: bad anchor {a!r}")
+                continue
+            if not isinstance(a, (str, dict)) or (isinstance(a, dict)
+                                                  and "code" not in a):
+                errs.append(f"category_overture_mapping {cat}: bad anchor {a!r}")
+                continue
+            code = anchor_spec(a)[0]
+            if taxonomy is not None and code not in taxonomy:
+                errs.append(f"category_overture_mapping {cat}: anchor "
+                            f"{code!r} is not in the vendored taxonomy")
+
+    seen: set[str] = set()
+    statutory_states: set[str] = set()
+    guideline_states: set[str] = set()
+    for i, r in enumerate(doc.get("rules") or []):
+        rid = r.get("rule_id") or f"rules[{i}]"
+
+        def e(msg, rid=rid):
+            errs.append(f"{rid}: {msg}")
+
+        if rid in seen:
+            e("duplicate rule_id")
+        seen.add(rid)
+        code, auth, mech = r.get("state_code"), r.get("authority"), r.get("mechanism")
+        if code not in STATE_NAMES:
+            e(f"unknown state_code {code!r}")
+        if auth not in AUTHORITIES:
+            e(f"authority must be one of {sorted(AUTHORITIES)}")
+        if mech not in MECHANISMS:
+            e(f"mechanism must be one of {sorted(MECHANISMS)}")
+        if not r.get("title"):
+            e("title is required")
+        for f in ("effective_date", "last_verified"):
+            if not isinstance(r.get(f), date):
+                e(f"{f} must be a YAML date")
+        if r.get("confidence") not in CONFIDENCES:
+            e(f"confidence must be one of {sorted(CONFIDENCES)}")
+        _check_sources(r.get("sources"), e)
+
+        if auth == "statute":
+            statutory_states.add(code)
+            if mech != "proximity":
+                e("statutes must use mechanism proximity")
+            for f in ("citation", "statutory_language"):
+                if not r.get(f):
+                    e(f"{f} is required for statutes")
+            if not isinstance(r.get("language_verbatim"), bool):
+                e("language_verbatim (true/false) is required for statutes")
+            if r.get("distance_basis") == "tbd":
+                e("a statute in force cannot have distance_basis tbd")
+            if (r.get("distance_basis") == "statutory"
+                    and r.get("language_verbatim") is not True):
+                e("a statutory distance needs language_verbatim: true, "
+                  "quoting the text it comes from")
+        else:
+            guideline_states.add(code)
+            if not r.get("summary"):
+                e("summary (public text) is required for non-statutes")
+            if r.get("distance_basis") == "statutory":
+                e("only a statute can have distance_basis statutory")
+            if (auth == "statute_pending_distance" and mech == "proximity"
+                    and r.get("distance_basis") != "tbd"):
+                e("statute_pending_distance needs distance_basis tbd")
+
+        if mech == "proximity":
+            if r.get("restricted_category") not in cats:
+                e(f"restricted_category {r.get('restricted_category')!r} "
+                  "is not in category_overture_mapping")
+            basis = r.get("distance_basis")
+            if basis not in DISTANCE_BASES:
+                e(f"distance_basis must be one of {sorted(DISTANCE_BASES)}")
+            bm = r.get("buffer_meters")
+            if basis == "statutory":
+                if not isinstance(bm, (int, float)) or bm <= 0:
+                    e("distance_basis statutory needs a numeric buffer_meters "
+                      "taken from the statute")
+            elif bm is not None:
+                e("buffer_meters must be null unless distance_basis is statutory")
+        elif mech == "road_class":
+            if auth == "statute":
+                e("road_class is for guidelines only")
+            try:
+                re.compile(r.get("road_ref_regex") or "")
+            except re.error as ex:
+                e(f"road_ref_regex does not compile: {ex}")
+            if not r.get("road_ref_regex"):
+                e("road_ref_regex is required")
+            rb = r.get("road_buffer_m")
+            if not isinstance(rb, (int, float)) or rb <= 0:
+                e("road_buffer_m must be a positive number")
+            gc = r.get("grandfather_cutoff")
+            if gc is not None and not isinstance(gc, date):
+                e("grandfather_cutoff must be null or a YAML date")
+            if "distance_basis" in r:
+                e("road_class rules use road_buffer_m, not distance_basis")
+
+    reviewed: set[str] = set()
+    for i, s in enumerate(doc.get("states_reviewed") or []):
+        code = s.get("state_code")
+
+        def e(msg, code=code, i=i):
+            errs.append(f"states_reviewed {code or i}: {msg}")
+
+        if code not in STATE_NAMES:
+            e(f"unknown state_code {code!r}")
+        if code in reviewed:
+            e("duplicate entry")
+        reviewed.add(code)
+        if s.get("statute_status") not in STATUTE_STATUSES:
+            e(f"statute_status must be one of {sorted(STATUTE_STATUSES)}")
+        if s.get("confidence") not in CONFIDENCES:
+            e(f"confidence must be one of {sorted(CONFIDENCES)}")
+        summ = s.get("summary")
+        if not isinstance(summ, str) or not summ.strip():
+            e("summary is required")
+        if not isinstance(s.get("last_verified"), date):
+            e("last_verified must be a YAML date")
+        _check_sources(s.get("sources"), e)
+        if code in statutory_states:
+            e("has a statutory siting rule, so it must not be listed here")
+    for code in sorted(guideline_states - statutory_states - reviewed):
+        errs.append(f"states_reviewed: {code} has guideline rules, so it "
+                    "needs an entry describing its statutory position")
+
+    # Public text must read as finished sentences and avoid em dashes.
+    public = [("states_reviewed", doc.get("states_reviewed")),
+              ("rules", doc.get("rules"))]
+    for name, block in public:
+        for path, s in _strings(block, name):
+            if "\u2014" in s:
+                errs.append(f"{path}: contains an em dash")
+            if (path.endswith((".summary", ".maintainer_notes"))
+                    and not s.rstrip().endswith((".", ")", '"'))):
+                errs.append(f"{path}: should end with a full sentence")
+    return errs
+
+
+def public_copy(entry: dict) -> dict:
+    """An exported copy of a rule/state entry without maintainer-only
+    fields."""
+    return {k: v for k, v in entry.items() if k not in PRIVATE_FIELDS}
+
+
+def load_rules_doc(path: Path, taxonomy: dict | None = None) -> dict:
+    """Parse, validate, and normalize the rules file. Exits with every
+    problem listed if validation fails. Adds statutory_rules,
+    guideline_rules, and the derived fields the matcher and UI use."""
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    errs = validate_rules_doc(doc, taxonomy or load_taxonomy())
+    if errs:
+        sys.exit("rules file is invalid:\n  - " + "\n  - ".join(errs))
+
+    def primary_url(entry):
+        srcs = entry["sources"]
+        return next((s["url"] for s in srcs if s["type"] == "primary"),
+                    srcs[0]["url"])
+
+    on_prem = doc["default_on_premises_m"]
+    for r in doc["rules"]:
+        r["source_url"] = primary_url(r)
+        basis = r.get("distance_basis")
+        r["buffer_specified"] = basis == "statutory"
+        r["heuristic_buffer_meters"] = (
+            on_prem if basis in ("on_premises", "tbd") else None)
+        r["distance_tbd"] = basis == "tbd"
+    for s in doc["states_reviewed"]:
+        s["source_url"] = primary_url(s)
+    doc["statutory_rules"] = [r for r in doc["rules"]
+                              if r["authority"] == "statute"]
+    doc["guideline_rules"] = [r for r in doc["rules"]
+                              if r["authority"] != "statute"]
+    return doc
+
 # Interior probe point per state (lon, lat), used to pull each state's
 # division_area polygon from Overture with a tiny bbox query. Points sit
 # well inside the land polygon, away from borders and coastlines.
@@ -112,23 +342,31 @@ INTERIOR_POINTS = {
     "WV": (-80.6, 38.6), "WI": (-89.8, 44.6), "WY": (-107.5, 43.0),
 }
 
-# Religion for worship-place icon variants, derived from the Overture
-# category code (OSM used the religion tag; Overture encodes it in the
-# taxonomy instead).
-RELIGION_BY_CATEGORY = {
-    "church_cathedral": "christian",
-    "mosque": "muslim",
-    "synagogue": "jewish",
-    "buddhist_temple": "buddhist",
-    "hindu_temple": "hindu",
-    "sikh_temple": "sikh",
-    "shinto_shrines": "shinto",
+# Religion for worship-place icon variants, read from the place's Overture
+# taxonomy hierarchy: any denominational place of worship carries its
+# faith's node among its ancestors.
+RELIGION_BY_ANCESTOR = {
+    "christian_place_of_worship": "christian",
+    "muslim_place_of_worship": "muslim",
+    "jewish_place_of_worship": "jewish",
+    "buddhist_place_of_worship": "buddhist",
+    "hindu_place_of_worship": "hindu",
+    "sikh_place_of_worship": "sikh",
+    "shinto_shrine": "shinto",
 }
+
+
+def religion_from_hierarchy(hierarchy: list[str] | None) -> str | None:
+    for code in hierarchy or []:
+        if code in RELIGION_BY_ANCESTOR:
+            return RELIGION_BY_ANCESTOR[code]
+    return None
 
 
 # --------------------------------------------------------------- fetch ----
 
-def http_post_overpass(data: str, retries: int = 10) -> bytes:
+def http_post_overpass(data: str, retries: int = 10,
+                       timeout: int = 90) -> bytes:
     """POST to Overpass, rotating across mirrors with backoff on 429/504."""
     for attempt in range(retries):
         url = OVERPASS_URLS[attempt % len(OVERPASS_URLS)]
@@ -138,27 +376,46 @@ def http_post_overpass(data: str, retries: int = 10) -> bytes:
                 data=("data=" + urllib.parse.quote(data)).encode(),
                 headers={"User-Agent": "alpr-siting-compliance-map/0.1 (advocacy research tool)"},
             )
-            with urllib.request.urlopen(req, timeout=90) as resp:
-                return resp.read()
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = resp.read()
+            # A timed-out or out-of-memory query still answers 200, with the
+            # failure in a "remark" ahead of a partial or empty result.
+            if b"runtime error" in body[:1000]:
+                raise RuntimeError("Overpass runtime error (partial result)")
+            return body
         except Exception as e:  # noqa: BLE001
             if attempt == retries - 1:
                 raise
             wait = min(15 * (attempt + 1), 45)
-            print(f"    retry in {wait}s on next mirror ({e})")
+            host = urllib.parse.urlparse(url).netloc
+            print(f"    {host} failed ({e}); retrying in {wait}s")
             time.sleep(wait)
     raise RuntimeError("unreachable")
 
 
-def overpass_query(cache_key: str, query: str, offline: bool) -> dict:
-    """Run an Overpass query with on-disk caching."""
+def overpass_query(cache_key: str, query: str, offline: bool,
+                   refresh_scope: str | None = "cameras",
+                   required: bool = True, timeout: int = 90) -> dict | None:
+    """Run an Overpass query with on-disk caching.
+
+    refresh_scope: the --refresh scope that invalidates this cache entry
+    (None = never; used for historical as-of snapshots, which can't change).
+    required: when False, an offline cache miss returns None instead of
+    exiting, for optional guideline data.
+    timeout: client read timeout in seconds (heavy queries need more).
+    """
     cache_file = CACHE_DIR / f"{cache_key}.json"
-    if cache_file.exists() and "cameras" not in REFRESH_SCOPES:
+    refresh = refresh_scope is not None and refresh_scope in REFRESH_SCOPES
+    if cache_file.exists() and not refresh:
         print(f"    cache hit: {cache_file.name}")
         return json.loads(cache_file.read_text(encoding="utf-8"))
     if offline:
+        if not required:
+            print(f"    no cache for {cache_key} (offline); skipping")
+            return None
         sys.exit(f"--offline set but no cache for {cache_key}")
     print(f"    querying Overpass: {cache_key} ...")
-    raw = http_post_overpass(query)
+    raw = http_post_overpass(query, timeout=timeout)
     data = json.loads(raw)
     CACHE_DIR.mkdir(exist_ok=True)
     cache_file.write_text(json.dumps(data), encoding="utf-8")
@@ -193,49 +450,299 @@ out body;
     return cams
 
 
+# ----------------------------------------------- "spirit-of" guidelines ----
+
+ROAD_QUERY_CHUNK = 1500  # camera ids per Overpass road query
+
+
+def fetch_state_road_ways(state_code: str, regex: str, buffer_m: float,
+                          camera_ids: list[int],
+                          offline: bool) -> list[dict] | None:
+    """State-system road ways (ref matches regex) within buffer_m of any of
+    the given ALPR cameras, with geometry. Queried in id chunks because one
+    statewide query for thousands of cameras times out on public mirrors.
+    None if any chunk is unavailable offline."""
+    key = hashlib.sha1(f"{regex}|{buffer_m}".encode()).hexdigest()[:8]
+    ids = sorted(camera_ids)
+    ways: dict[int, dict] = {}
+    names = set()
+    for n, i in enumerate(range(0, len(ids), ROAD_QUERY_CHUNK)):
+        chunk = ids[i:i + ROAD_QUERY_CHUNK]
+        ck = hashlib.sha1(",".join(map(str, chunk)).encode()).hexdigest()[:8]
+        name = f"roads_{state_code}_{key}_{n}_{ck}"
+        names.add(f"{name}.json")
+        q = f"""
+[out:json][timeout:300];
+node(id:{",".join(map(str, chunk))})->.c;
+way(around.c:{buffer_m:g})["highway"]["ref"~"{regex}"];
+out geom;
+"""
+        data = overpass_query(name, q, offline, required=False, timeout=330)
+        if data is None:
+            return None
+        for el in data.get("elements", []):
+            if el.get("type") == "way":
+                ways[el["id"]] = el
+    # Camera sets change between runs, which changes the chunk hashes; drop
+    # superseded cache files so the cache dir doesn't grow unbounded.
+    if CACHE_DIR.exists():
+        for f in CACHE_DIR.glob(f"roads_{state_code}_{key}_*.json"):
+            if f.name not in names:
+                f.unlink()
+    return list(ways.values())
+
+
+def fetch_camera_ids_asof(state_code: str, as_of: date,
+                          offline: bool) -> set[int] | None:
+    """OSM ids of ALPR nodes that already existed on as_of (Overpass attic
+    snapshot). None if unavailable offline. Snapshots never change, so they
+    ignore --refresh."""
+    q = f"""
+[out:json][timeout:300][date:"{as_of.isoformat()}T00:00:00Z"];
+area["ISO3166-2"="US-{state_code}"][admin_level=4]->.st;
+node["man_made"="surveillance"]["surveillance:type"="ALPR"](area.st);
+out ids;
+"""
+    data = overpass_query(f"cameras_asof_{state_code}_{as_of.isoformat()}", q,
+                          offline, refresh_scope=None, required=False,
+                          timeout=330)
+    if data is None:
+        return None
+    return {el["id"] for el in data.get("elements", [])}
+
+
+def _point_segment_m(lat: float, lon: float, a: dict, b: dict) -> float:
+    """Distance (m) from a point to segment a-b, local equirectangular."""
+    kx = 111_320 * math.cos(math.radians(lat))
+    ky = 110_574
+    ax, ay = (a["lon"] - lon) * kx, (a["lat"] - lat) * ky
+    bx, by = (b["lon"] - lon) * kx, (b["lat"] - lat) * ky
+    dx, dy = bx - ax, by - ay
+    seg2 = dx * dx + dy * dy
+    t = 0.0 if seg2 == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / seg2))
+    return math.hypot(ax + t * dx, ay + t * dy)
+
+
+def nearest_road_refs(cameras: list[dict], ways: list[dict],
+                      buffer_m: float) -> dict[str, tuple[str, float]]:
+    """camera_id -> (ref, distance_m) of the nearest listed way segment
+    within buffer_m."""
+    cell = 0.001
+    grid: dict[tuple[int, int], list[dict]] = defaultdict(list)
+    for cam in cameras:
+        grid[(int(cam["lat"] // cell), int(cam["lon"] // cell))].append(cam)
+    pad = buffer_m / 111_000 + 1e-6
+    best: dict[str, tuple[str, float]] = {}
+    for way in ways:
+        ref = (way.get("tags") or {}).get("ref", "")
+        geom = way.get("geometry") or []
+        for a, b in zip(geom, geom[1:]):
+            lo_y = int((min(a["lat"], b["lat"]) - pad) // cell)
+            hi_y = int((max(a["lat"], b["lat"]) + pad) // cell)
+            lo_x = int((min(a["lon"], b["lon"]) - pad * 1.5) // cell)
+            hi_x = int((max(a["lon"], b["lon"]) + pad * 1.5) // cell)
+            for gy in range(lo_y, hi_y + 1):
+                for gx in range(lo_x, hi_x + 1):
+                    for cam in grid.get((gy, gx), ()):
+                        d = _point_segment_m(cam["lat"], cam["lon"], a, b)
+                        cur = best.get(cam["camera_id"])
+                        if d <= buffer_m and (cur is None or d < cur[1]):
+                            best[cam["camera_id"]] = (ref, d)
+    return best
+
+
+def road_eval_key(rule: dict) -> str:
+    """Identifies the road-lookup configuration. Per-camera road results
+    carried over from the last build count only when this key matches."""
+    sig = f"{rule['road_ref_regex']}|{float(rule.get('road_buffer_m', 30))}"
+    return f"{rule['rule_id']}:{hashlib.sha1(sig.encode()).hexdigest()[:8]}"
+
+
+def load_previous_cameras() -> dict[str, dict]:
+    """camera_id -> {lat, lon, props} from the last emitted cameras.geojson.
+    Seeds road lookups so a routine refresh only queries new or moved
+    cameras. Empty if there is no readable earlier build."""
+    path = OUT_DIR / "cameras.geojson"
+    try:
+        gj = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    prev = {}
+    for f in gj.get("features", []):
+        lon, lat = f["geometry"]["coordinates"][:2]
+        prev[f["properties"]["camera_id"]] = {
+            "lat": lat, "lon": lon, "props": f["properties"]}
+    return prev
+
+
+def apply_road_guidelines(cameras: list[dict], guideline_rules: list[dict],
+                          offline: bool,
+                          previous: dict[str, dict] | None = None) -> int:
+    """Tag cameras sitting on state-maintained roads for road_class
+    guidelines. phase: "all" (no grandfather date), "existing" (already in
+    OSM at the cutoff, filtered out), "new" (first appears after the cutoff:
+    possibly a problem), "unknown" (as-of snapshot unavailable).
+
+    Cameras whose id and position match the previous build, evaluated under
+    the same rule configuration, reuse that result; only the rest hit
+    Overpass."""
+    previous = previous or {}
+    n_flag = 0
+    for rule in guideline_rules:
+        if rule.get("mechanism") != "road_class":
+            continue
+        st = rule["state_code"]
+        key = road_eval_key(rule)
+        st_cams = [c for c in cameras if c["state_code"] == st]
+        buf = float(rule.get("road_buffer_m", 30))
+
+        on_road: dict[str, str] = {}   # camera_id -> ref
+        todo = []
+        for cam in st_cams:
+            prev = previous.get(cam["camera_id"])
+            same = (prev is not None
+                    and round(prev["lat"], 6) == round(cam["lat"], 6)
+                    and round(prev["lon"], 6) == round(cam["lon"], 6)
+                    and prev["props"].get("road_eval") == key)
+            if not same:
+                todo.append(cam)
+                continue
+            cam["road_eval"] = key
+            if prev["props"].get("road_rule_id") == rule["rule_id"]:
+                on_road[cam["camera_id"]] = prev["props"].get("road_ref") or ""
+        reused = len(st_cams) - len(todo)
+
+        if todo:
+            ways = fetch_state_road_ways(
+                st, rule["road_ref_regex"], buf,
+                [c["osm_id"] for c in todo], offline)
+            if ways is None:
+                print(f"    {st}: road data unavailable for {len(todo)} "
+                      "cameras, guideline skipped for them")
+            else:
+                hits = nearest_road_refs(todo, ways, buf)
+                for cam in todo:
+                    cam["road_eval"] = key
+                    if cam["camera_id"] in hits:
+                        on_road[cam["camera_id"]] = hits[cam["camera_id"]][0]
+
+        cutoff = rule.get("grandfather_cutoff")
+        asof = (fetch_camera_ids_asof(st, cutoff, offline)
+                if cutoff and on_road else None)
+        for cam in st_cams:
+            if cam["camera_id"] not in on_road:
+                continue
+            cam["road_rule_id"] = rule["rule_id"]
+            cam["road_ref"] = on_road[cam["camera_id"]]
+            if not cutoff:
+                phase = "all"
+            elif asof is None:
+                phase = "unknown"
+            else:
+                phase = "existing" if cam["osm_id"] in asof else "new"
+            cam["road_phase"] = phase
+            cam["road_flag"] = phase != "existing"
+            n_flag += cam["road_flag"]
+        print(f"    {st}: {len(on_road)} of {len(st_cams)} cameras on state "
+              f"roads ({reused} reused from the previous build, "
+              f"{len(todo)} looked up)")
+    return n_flag
+
+
 # ------------------------------------------------- Overture fetch ----
 
 def load_taxonomy() -> dict[str, list[str]]:
-    """Parse the vendored Overture categories CSV: code -> ancestry list
-    (root first, the code itself last)."""
+    """Parse the vendored Overture places taxonomy: primary code -> path
+    from the root category down to the code itself."""
     taxonomy = {}
-    with TAXONOMY_CSV.open(encoding="utf-8") as fh:
-        reader = csv.reader(fh, delimiter=";")
-        next(reader)  # header
-        for row in reader:
-            if len(row) < 2:
-                continue
-            code = row[0].strip()
-            chain = row[1].strip().strip("[]").split(",")
-            taxonomy[code] = [c.strip() for c in chain]
+    with TAXONOMY_CSV.open(encoding="utf-8", newline="") as fh:
+        for row in csv.DictReader(fh):
+            taxonomy[row["primary"].strip()] = [
+                c.strip() for c in row["taxonomy"].split(">")]
     return taxonomy
 
 
-def build_category_lookup(cat_mapping: dict[str, list[str]],
+def anchor_spec(anchor) -> tuple[str, bool]:
+    """(code, include_descendants) for a category_overture_mapping entry:
+    a bare string covers the whole subtree, {code, descendants: false}
+    only the code itself."""
+    if isinstance(anchor, str):
+        return anchor, True
+    return anchor["code"], anchor.get("descendants", True)
+
+
+def build_category_lookup(cat_mapping: dict[str, list],
                           taxonomy: dict[str, list[str]]) -> dict[str, str]:
     """Expand the curated mapping into a flat Overture-code -> protected
-    category dict. A code matches when it or any taxonomy ancestor is
-    listed in the mapping (so "elementary_school" matches via "school")."""
-    wanted = {}  # anchor code -> protected category
+    category dict. A code matches when it or a taxonomy ancestor is a
+    subtree anchor (so "elementary_school" matches via "school"), or when
+    it is itself an exact anchor."""
+    subtree, exact = {}, {}  # anchor code -> protected category
     for protected, anchors in cat_mapping.items():
         for a in anchors:
-            wanted[a] = protected
+            code, descendants = anchor_spec(a)
+            (subtree if descendants else exact)[code] = protected
     lookup = {}
     for code, chain in taxonomy.items():
         for anchor in chain:
-            if anchor in wanted:
-                lookup[code] = wanted[anchor]
+            if anchor in subtree:
+                lookup[code] = subtree[anchor]
+                break
+            if anchor == code and code in exact:
+                lookup[code] = exact[code]
                 break
     return lookup
 
 
 def _overture_reader(overture_type: str, bbox: tuple):
+    """Batches of one Overture type inside bbox. The STAC index narrows the
+    read to the files that intersect, so cost tracks the bbox instead of the
+    dataset's file count; an unreachable index falls back to a full scan."""
     try:
         from overturemaps import core
     except ImportError:
         sys.exit("overturemaps required for non-cached fetches: "
                  "pip install overturemaps")
-    return core.record_batch_reader(overture_type, bbox=bbox)
+    try:
+        reader = core.record_batch_reader(overture_type, bbox=bbox, stac=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"    STAC lookup failed ({e}); scanning the full dataset")
+        reader = core.record_batch_reader(overture_type, bbox=bbox)
+    if reader is None:
+        print(f"    no Overture {overture_type} files intersect {bbox}")
+        return iter(())
+    return reader
+
+
+_PREV_DIVISIONS: dict[str, dict[str, dict]] = {}
+
+
+def previous_division(state_code: str) -> dict | None:
+    """A state's division entry from the last emitted states.geojson.
+
+    State boundaries are effectively static, and CI starts with an empty
+    cache dir, so re-streaming ~50 polygons from Overture on every run is
+    wasted work (about 15 minutes). Seeding from the previous build skips
+    it; `--refresh divisions` still forces a real fetch."""
+    path = OUT_DIR / "states.geojson"
+    key = str(path)
+    if key not in _PREV_DIVISIONS:
+        entries = {}
+        try:
+            gj = json.loads(path.read_text(encoding="utf-8"))
+            for f in gj.get("features", []):
+                p = f["properties"]
+                if p.get("division_id") and f.get("geometry"):
+                    entries[p["state_code"]] = {
+                        "state_code": p["state_code"],
+                        "name": p["name"],
+                        "division_id": p["division_id"],
+                        "geometry": f["geometry"],
+                    }
+        except (OSError, ValueError, KeyError):
+            pass
+        _PREV_DIVISIONS[key] = entries
+    return _PREV_DIVISIONS[key].get(state_code)
 
 
 def fetch_division(state_code: str, offline: bool) -> dict:
@@ -249,6 +756,11 @@ def fetch_division(state_code: str, offline: bool) -> dict:
     if cache_file.exists() and "divisions" not in REFRESH_SCOPES:
         print(f"    cache hit: {cache_file.name}")
         return json.loads(cache_file.read_text(encoding="utf-8"))
+    if "divisions" not in REFRESH_SCOPES:
+        seeded = previous_division(state_code)
+        if seeded is not None:
+            print(f"    seeded from previous build: {state_code}")
+            return seeded
     if offline:
         sys.exit(f"--offline set but no cache for overture_division_{state_code}")
 
@@ -286,13 +798,16 @@ def fetch_division(state_code: str, offline: bool) -> dict:
 
 def fetch_overture_places(state_code: str, needed_cats: set[str],
                           code_lookup: dict[str, str], division: dict,
-                          offline: bool) -> list[dict]:
+                          offline: bool,
+                          known_codes: set[str] | None = None) -> list[dict]:
     """Protected places of all needed categories in one state, streamed
     from the Overture places theme and filtered locally.
 
     The bbox comes from the state's division polygon; a point-in-polygon
     pass drops neighbors whose bboxes overlap. Cached post-filter, keyed
     with the category codes used so mapping changes self-invalidate.
+    known_codes (the vendored taxonomy's codes) lets the stream report
+    places whose category the vendored taxonomy doesn't know.
     """
     mapping_key = sorted(c for c, p in code_lookup.items() if p in needed_cats)
     cache_file = CACHE_DIR / f"overture_places_{state_code}.json"
@@ -318,31 +833,45 @@ def fetch_overture_places(state_code: str, needed_cats: set[str],
           f"(bbox {minx:.2f},{miny:.2f},{maxx:.2f},{maxy:.2f}) ...")
     places = []
     total = 0
+    unknown: dict[str, int] = defaultdict(int)
     reader = _overture_reader("place", (minx, miny, maxx, maxy))
     for batch in reader:
-        cols = batch.to_pydict()
+        if "taxonomy" not in batch.schema.names:
+            sys.exit("Overture places have no `taxonomy` column; update "
+                     "overturemaps and build/vendor/overture_taxonomy.csv")
         total += batch.num_rows
-        for i in range(batch.num_rows):
-            cat_struct = cols["categories"][i]
-            code = cat_struct.get("primary") if cat_struct else None
+        # Decode only the taxonomy column up front; the other columns are
+        # read for the few rows that match.
+        taxonomy = batch.column("taxonomy").to_pylist()
+        for i, tax in enumerate(taxonomy):
+            code = (tax or {}).get("primary")
+            if known_codes is not None and code and code not in known_codes:
+                unknown[code] += 1
             protected = code_lookup.get(code)
             if protected is None or protected not in needed_cats:
                 continue
-            geom = shapely.from_wkb(cols["geometry"][i])
+            geom = shapely.from_wkb(batch.column("geometry")[i].as_py())
             pt = shapely.centroid(geom) if geom.geom_type != "Point" else geom
             if not shapely.contains_xy(shape, pt.x, pt.y):
                 continue
-            names = cols["names"][i] or {}
+            names = batch.column("names")[i].as_py() or {}
             places.append({
-                "place_id": f"overture-{cols['id'][i]}",
+                "place_id": f"overture-{batch.column('id')[i].as_py()}",
                 "lat": round(pt.y, 7),
                 "lon": round(pt.x, 7),
                 "name": names.get("primary") or f"(unnamed {protected})",
                 "category": protected,
                 "state_code": state_code,
-                "religion": RELIGION_BY_CATEGORY.get(code),
+                "religion": (religion_from_hierarchy(tax.get("hierarchy"))
+                             if protected == "place_of_worship" else None),
                 "overture_category": code,
             })
+    if unknown:
+        top = ", ".join(f"{c} ({n})" for c, n in sorted(
+            unknown.items(), key=lambda kv: -kv[1])[:5])
+        print(f"    WARNING: {sum(unknown.values())} places use taxonomy "
+              f"codes missing from the vendored taxonomy ({top}); refresh "
+              "build/vendor/overture_taxonomy.csv")
     print(f"    {state_code}: kept {len(places)} of {total} streamed places")
     CACHE_DIR.mkdir(exist_ok=True)
     cache_file.write_text(
@@ -474,6 +1003,8 @@ def run_matching(cameras: list[dict], places_by_cat: dict[str, list[dict]],
                     "buffer_m": buffer_m,
                     "buffer_specified": bool(rule.get("buffer_specified")),
                     "rule_heuristic_m": rule.get("heuristic_buffer_meters"),
+                    "guideline": rule.get("authority", "statute") != "statute",
+                    "distance_tbd": bool(rule.get("distance_tbd")),
                 })
     return matches
 
@@ -543,8 +1074,12 @@ def cone_polygon(lat: float, lon: float, bearing: float) -> list[list[float]]:
 
 
 def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
-         default_buffer, rule_states, scan_max):
+         default_buffer, rule_states, scan_max, guideline_rules=None):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    guideline_rules = guideline_rules or []
+    guide_states = {g["state_code"] for g in guideline_rules}
+    guide_cats = {g["restricted_category"] for g in guideline_rules
+                  if g.get("restricted_category")}
     matches_by_cam = defaultdict(list)
     for m in matches:
         matches_by_cam[m["camera_id"]].append(m)
@@ -559,10 +1094,16 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
         # status reflects the default buffers; candidates beyond them are
         # kept in the file so the UI slider can widen the radius client-side
         within = [m for m in cam_matches if m["distance_m"] <= m["buffer_m"]]
+        statutory_hits = [m for m in within if not m.get("guideline")]
+        road_flag = bool(cam.get("road_flag"))
         if cam.get("possible_exclusion"):
             status = "possible_exclusion"
+        elif statutory_hits:
+            status = "flagged"
+        elif len(within) > len(statutory_hits) or road_flag:
+            status = "guideline"
         else:
-            status = "flagged" if within else "checked_clear"
+            status = "checked_clear"
         bearings = parse_directions(cam["direction"])
         cam_features.append({
             "type": "Feature",
@@ -578,6 +1119,11 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
                 "status": status,
                 "match_count": len(within),
                 "matches": json.dumps(cam_matches),
+                "road_rule_id": cam.get("road_rule_id"),
+                "road_ref": cam.get("road_ref"),
+                "road_phase": cam.get("road_phase"),
+                "road_flag": road_flag,
+                "road_eval": cam.get("road_eval"),
             },
         })
         for b in bearings:
@@ -596,7 +1142,9 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
     place_features = []
     for places in places_by_cat.values():
         for p in places:
-            if p["place_id"] in matched_place_ids:
+            # Guideline categories are rare and the point is seeing them,
+            # so those places are emitted whether or not a camera is near.
+            if p["place_id"] in matched_place_ids or p["category"] in guide_cats:
                 place_features.append({
                     "type": "Feature",
                     "geometry": {"type": "Point", "coordinates": [p["lon"], p["lat"]]},
@@ -614,8 +1162,8 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
     # states.geojson - Overture division polygons annotated with law status.
     # States not yet reviewed get no feature at all (no overlay = no claim
     # either way).
-    reviewed_no_law = {
-        s["state_code"]: s for s in rules_doc.get("states_reviewed_no_siting_law", [])
+    reviewed = {
+        s["state_code"]: s for s in rules_doc.get("states_reviewed", [])
     }
     rule_verified = {}
     for r in rules:
@@ -627,9 +1175,14 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
         if code in rule_states:
             law_status = "siting_law"
             last_verified = rule_verified.get(code)
-        elif code in reviewed_no_law:
+        elif code in guide_states:
+            law_status = "guideline"
+            last_verified = str(max(
+                str(g.get("last_verified") or "")
+                for g in guideline_rules if g["state_code"] == code))
+        elif code in reviewed:
             law_status = "reviewed_no_law"
-            last_verified = str(reviewed_no_law[code].get("last_verified") or "")
+            last_verified = str(reviewed[code].get("last_verified") or "")
         else:
             continue
         state_features.append({
@@ -641,16 +1194,19 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
                 "division_id": div["division_id"],
                 "law_status": law_status,
                 "last_verified": last_verified,
-                "verdict": reviewed_no_law.get(code, {}).get("verdict"),
-                "note": reviewed_no_law.get(code, {}).get("note"),
+                "statute_status": reviewed.get(code, {}).get("statute_status"),
+                "summary": reviewed.get(code, {}).get("summary"),
+                "source_url": reviewed.get(code, {}).get("source_url"),
+                "guideline_title": "; ".join(sorted({
+                    g["title"] for g in guideline_rules
+                    if g["state_code"] == code})) or None,
             },
         })
     write_geojson("states.geojson", state_features)
 
-    # rules.json - full curated rules for popups / report drafting
-    onprem_default = min(
-        [r["heuristic_buffer_meters"] for r in rules
-         if r.get("heuristic_buffer_meters")] or [50])
+    # rules.json - public view of the curated rules for popups / report
+    # drafting (maintainer_notes never leave the YAML)
+    onprem_default = rules_doc.get("default_on_premises_m", 50)
     meta = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "default_heuristic_buffer_m": default_buffer,
@@ -669,11 +1225,16 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
         "camera_count": len(cameras),
         "flagged_count": sum(1 for f in cam_features
                              if f["properties"]["status"] == "flagged"),
+        "guideline_count": sum(1 for f in cam_features
+                               if f["properties"]["status"] == "guideline"),
+        "guideline_states": sorted(guide_states),
         "match_count": sum(1 for m in matches
-                           if m["distance_m"] <= m["buffer_m"]),
-        "rules": rules,
-        "states_reviewed_no_siting_law":
-            rules_doc.get("states_reviewed_no_siting_law", []),
+                           if m["distance_m"] <= m["buffer_m"]
+                           and not m.get("guideline")),
+        "rules": [public_copy(r) for r in rules],
+        "guideline_rules": [public_copy(r) for r in guideline_rules],
+        "states_reviewed": [public_copy(s)
+                            for s in rules_doc.get("states_reviewed", [])],
     }
     (OUT_DIR / "rules.json").write_text(
         json.dumps(meta, indent=1, default=json_default), encoding="utf-8")
@@ -726,7 +1287,10 @@ def main() -> None:
     ap.add_argument("--refresh", nargs="?", const="all", default=None,
                     metavar="SCOPE",
                     help="ignore cache and refetch: comma-separated subset of "
-                         "cameras,places,divisions, or 'all' (bare flag)")
+                         "cameras,places,divisions, or 'all' (bare flag). "
+                         "'roads' also redoes every state-road lookup, which "
+                         "is otherwise reused from the previous build; it is "
+                         "not part of 'all'")
     ap.add_argument("--states", default=None, help="comma-separated subset, e.g. WA,VA")
     args = ap.parse_args()
     if args.offline and args.refresh:
@@ -735,35 +1299,46 @@ def main() -> None:
         valid = {"cameras", "places", "divisions"}
         scopes = ({s.strip() for s in args.refresh.split(",")}
                   if args.refresh != "all" else set(valid))
-        bad = scopes - valid
+        bad = scopes - valid - {"roads"}
         if bad:
             sys.exit(f"unknown --refresh scope(s): {', '.join(sorted(bad))} "
-                     f"(valid: all, {', '.join(sorted(valid))})")
+                     f"(valid: all, roads, {', '.join(sorted(valid))})")
         REFRESH_SCOPES = scopes
         print(f"Refreshing: {', '.join(sorted(scopes))}")
 
-    rules_doc = yaml.safe_load(RULES_FILE.read_text(encoding="utf-8"))
-    rules = rules_doc["rules"]
+    taxonomy = load_taxonomy()
+    rules_doc = load_rules_doc(RULES_FILE, taxonomy)
+    rules = rules_doc["statutory_rules"]
     cat_mapping = rules_doc["category_overture_mapping"]
-    code_lookup = build_category_lookup(cat_mapping, load_taxonomy())
+    code_lookup = build_category_lookup(cat_mapping, taxonomy)
     default_buffer = (args.default_buffer
                       if args.default_buffer is not None
-                      else rules_doc.get("default_heuristic_buffer_m", 200))
+                      else rules_doc["default_heuristic_buffer_m"])
 
     rule_states = sorted({r["state_code"] for r in rules})
+    guideline_rules = rules_doc["guideline_rules"]
+    guide_states = sorted({g["state_code"] for g in guideline_rules})
     if args.states:
         keep = {s.strip().upper() for s in args.states.split(",")}
         rule_states = [s for s in rule_states if s in keep]
         rules = [r for r in rules if r["state_code"] in keep]
+        guide_states = [s for s in guide_states if s in keep]
+        guideline_rules = [g for g in guideline_rules
+                           if g["state_code"] in keep]
+    camera_states = sorted(set(rule_states) | set(guide_states))
+    # Guideline proximity rules ride through the same matcher, tagged as
+    # guideline by their authority
+    poi_guidelines = [g for g in guideline_rules
+                      if g["mechanism"] == "proximity"]
 
     print(f"States with siting rules: {', '.join(rule_states)}")
+    print(f"States with spirit-of guidelines: {', '.join(guide_states)}")
     print(f"Default heuristic buffer: {default_buffer} m")
 
     print("\n[1/5] Fetching state boundaries (Overture divisions) ...")
-    reviewed = [s["state_code"]
-                for s in rules_doc.get("states_reviewed_no_siting_law", [])]
+    reviewed = [s["state_code"] for s in rules_doc["states_reviewed"]]
     divisions: dict[str, dict] = {}
-    div_states = sorted(set(rule_states) | set(reviewed))
+    div_states = sorted(set(camera_states) | set(reviewed))
     for i, st in enumerate(div_states, 1):
         if st not in INTERIOR_POINTS:
             print(f"    [{i}/{len(div_states)}] {st}: no interior probe point, skipping")
@@ -774,40 +1349,48 @@ def main() -> None:
 
     print("\n[2/5] Fetching ALPR cameras (OSM/DeFlock tagging) ...")
     cameras: list[dict] = []
-    for i, st in enumerate(rule_states, 1):
+    for i, st in enumerate(camera_states, 1):
         cams = fetch_cameras(st, args.offline)
-        print(f"    [{i}/{len(rule_states)}] {st}: {len(cams)} cameras")
+        print(f"    [{i}/{len(camera_states)}] {st}: {len(cams)} cameras")
         cameras.extend(cams)
 
     print("\n[3/5] Fetching protected places (Overture places) ...")
     needed_cats = defaultdict(set)  # state -> categories its rules need
-    for r in rules:
+    for r in rules + poi_guidelines:
         needed_cats[r["state_code"]].add(r["restricted_category"])
     places_by_cat: dict[str, list[dict]] = defaultdict(list)
-    for i, st in enumerate(rule_states, 1):
+    place_states = [s for s in camera_states if needed_cats[s]]
+    for i, st in enumerate(place_states, 1):
         pls = fetch_overture_places(st, needed_cats[st], code_lookup,
-                                    divisions[st], args.offline)
+                                    divisions[st], args.offline,
+                                    known_codes=set(taxonomy))
         by_cat = defaultdict(int)
         for p in pls:
             places_by_cat[p["category"]].append(p)
             by_cat[p["category"]] += 1
-        print(f"    [{i}/{len(rule_states)}] {st}: "
+        print(f"    [{i}/{len(place_states)}] {st}: "
               + ", ".join(f"{c}={n}" for c, n in sorted(by_cat.items())))
 
     print("\n[4/5] Matching cameras against rules ...")
     n_excl = mark_possible_exclusions(cameras, rules, rules_doc)
     print(f"    {n_excl} cameras marked possible statutory exclusion "
           f"(traffic-safety vendors)")
-    matches = run_matching(cameras, places_by_cat, rules, default_buffer,
-                           args.scan_max)
+    n_road = apply_road_guidelines(
+        cameras, guideline_rules, args.offline,
+        previous={} if "roads" in REFRESH_SCOPES else load_previous_cameras())
+    print(f"    {n_road} cameras flagged by state-road guidelines")
+    matches = run_matching(cameras, places_by_cat, rules + poi_guidelines,
+                           default_buffer, args.scan_max)
     flagged = len({m["camera_id"] for m in matches
-                   if m["distance_m"] <= m["buffer_m"]})
+                   if m["distance_m"] <= m["buffer_m"]
+                   and not m.get("guideline")})
     print(f"    {len(matches)} candidate matches; {flagged} cameras flagged "
           f"at default buffers")
 
     print("\n[5/5] Emitting artifacts ...")
     meta = emit(cameras, places_by_cat, matches, rules, rules_doc,
-                divisions, default_buffer, rule_states, args.scan_max)
+                divisions, default_buffer, rule_states, args.scan_max,
+                guideline_rules=guideline_rules)
 
     print(f"\nDone. {meta['flagged_count']} of {meta['camera_count']} cameras flagged "
           f"for review. Serve ./web to view the map.")

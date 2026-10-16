@@ -1,0 +1,31 @@
+ALPR siting law re-review, 2026-10-16 (delta from 2026-07-18 survey)
+
+Result: no new state siting law beyond WA and VA. No rule entries added.
+
+Method: web research (secondary trackers plus primary text where readable).
+Secondary: recordinglaw.com 50-state comparison (as of 2026-10-01, 26 states
+with ALPR-specific statutes), multistate.us (2026-09-23), LAPPA, news.
+
+New 2026 enactments checked
+- NM SB 40 (eff 2026-07-01): sharing limits, reporting. Text read. No siting.
+- KY HB 58 (eff 2026-07-15): use/retention/disclosure. Secondary sources only;
+  rights-of-way permit via Transportation Cabinet (permitting, not protected
+  locations). Confirm against statute text next review.
+- CT PA 26-14 sec. 13 (signed 2026-05-04; operating limits eff 2026-10-01):
+  use, 21-day retention, sharing. BORDERLINE: fixed readers barred on the
+  premises of, or within a POST Council-set distance of, registered
+  gender-affirming/reproductive health facilities and immigrant-serving
+  nonprofits. Secondary source (recordinglaw.com); statute PDF not readable.
+  Not modeled: opt-in registry, no numeric distance yet, categories differ
+  from tracked ones. Watch for the Council model policy (due 2026-12-01).
+- WA SB 6002, VA HB 2724: unchanged.
+
+Executive actions (not statutes, not protected-location siting)
+- FL: FDOT EOM 26-01 (2026-08-31) revoked ALPR right-of-way permits on state
+  highways.
+- TX: TxDOT paused new ALPR permits on state roads (Sept 2026) at the
+  Governor's direction; existing cameras remain.
+- MO: executive order on ALPR safeguards (use rules).
+
+Pending / next session: IN, NV, OH, UT, VA (expanded), AL, CA, CO.
+Vermont: state-agency ALPR use ban scheduled 2027-07-01 (use ban, not siting).

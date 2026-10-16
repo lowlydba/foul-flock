@@ -31,7 +31,7 @@ jobs:
   refresh:
     name: Rebuild and publish data
     runs-on: ubuntu-slim
-    timeout-minutes: 60
+    timeout-minutes: 120 # a cold run looks up every state-road camera; routine runs reuse the previous build's results
     permissions:
       contents: write # push the auto/data-refresh branch
       pull-requests: write # open or update the refresh pull request

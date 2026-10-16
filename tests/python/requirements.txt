@@ -1,5 +1,8 @@
 # Dependencies for the Python unit tests (tests/python).
-# The tests exercise build/build.py's offline paths only, so overturemaps
-# is deliberately not required here.
+# The tests exercise build/build.py without network access. pyarrow and
+# shapely let the place-stream tests feed real Arrow batches through the
+# parser; overturemaps itself is not required.
 pyyaml==6.0.3
 pytest==9.1.1
+pyarrow==26.0.0
+shapely==2.2.0

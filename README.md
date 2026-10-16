@@ -36,13 +36,22 @@ The map deliberately distinguishes:
    date on hover. States that haven't been reviewed get no overlay at all,
    because "we looked and there's nothing" and "we haven't looked" are
    different claims.
+4. 🟠 **Spirit-of guideline** - amber. Not a siting statute: an executive
+   action or not-yet-operative provision the map visualizes best-effort
+   (rules with a non-statute `authority` in the rules file). Depending on the rule, cameras
+   are flagged for sitting on state-maintained roads or near best-effort
+   matches for a protected place type. Where a rule has a grandfather date,
+   cameras already mapped before it are filtered out and later ones are
+   only *possibly* a problem (mapping date is not install date). Rules
+   whose distance isn't set yet are labeled as such. Never produces a
+   report letter.
 
 ## Heuristic distances
 
 When a statute uses vague language ("immediately surrounding") instead of
 a number, the build applies a configurable **"close by" default of 100 m**.
 That number is ours, not the law's, and the UI labels it as such everywhere
-it appears (`buffer_specified: false` in the rules file).
+it appears (`distance_basis: close_by` in the rules file).
 
 Two legend sliders adjust the heuristics live, no rebuild needed (the build
 pre-computes candidates out to `--scan-max`, 400 m):
@@ -50,12 +59,12 @@ pre-computes candidates out to `--scan-max`, 400 m):
 - **"Close by"** (50-400 m, default 100) for statutes with no distance
   language at all.
 - **"On premises"** (10-150 m, default 50) for on-property language like
-  VA's "on or within the boundaries of" (`heuristic_buffer_meters` in the
-  rules file).
+  VA's "on or within the boundaries of" (`distance_basis: on_premises` in
+  the rules file).
 
 Statutory numeric distances are fixed and unaffected by either slider.
-Change the defaults with `--default-buffer` or `default_heuristic_buffer_m`
-in `rules/alpr_state_rules.yaml`.
+Change the defaults with `--default-buffer` / `default_heuristic_buffer_m`
+and `default_on_premises_m` in `rules/alpr_state_rules.yaml`.
 
 Whenever a heuristic distance is used, the UI and the drafted report letter
 also quote the statute's actual placement language ("on or immediately
@@ -152,11 +161,14 @@ CC-BY-4.0. Keep those notices intact when redistributing.
 ## Maintaining the rules file
 
 - Human-authored only. **Do not scrape legal text.**
-- Every entry needs `source_url`, `confidence`
+- The schema is documented in `AGENTS.md` and enforced on every build and
+  in `tests/python/test_rules.py`.
+- Every entry needs `sources`, `confidence`
   (`verified`/`inferred`/`needs_review`), and `last_verified`.
 - Re-review quarterly - ALPR siting law is an actively moving target.
-- If a statute gives no numeric distance, set `buffer_meters: null` and
-  `buffer_specified: false`; never invent a number and present it as law.
+- If a statute gives no numeric distance, set `buffer_meters: null` and a
+  non-statutory `distance_basis`; never invent a number and present it as
+  law.
 
 ## Honesty notes
 

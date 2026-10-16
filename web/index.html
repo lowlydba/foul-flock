@@ -40,25 +40,41 @@
 
   <aside id="legend">
       <div class="legend-title">Legend</div>
-      <div class="row"><span class="dot flagged"></span> Flagged <em>· verify before acting</em></div>
-      <div class="row"><span class="dot clear"></span> Nothing found</div>
-      <div class="row"><span class="dot excluded"></span> Possibly exempt device</div>
-      <div class="row"><span class="swatch law"></span> Siting law in effect</div>
-      <div class="row"><span class="swatch nolaw"></span> No siting law</div>
-      <div class="row"><span class="icon-chip" style="background:#c2620d" aria-hidden="true"></span> Protected places <em>· zoom in</em></div>
-      <div class="buffer-row">
-        <label for="buffer-slider">"Close by" radius</label>
-        <input type="range" id="buffer-slider" min="50" max="400" step="25" value="100" />
-        <output id="buffer-value" for="buffer-slider">100 m</output>
+      <div class="legend-group">
+        <div class="legend-sub">Cameras</div>
+        <div class="row"><span class="dot flagged"></span> Flagged <em>· verify before acting</em></div>
+        <div class="row"><span class="dot guideline"></span> Spirit-of guideline <em>· not a statute</em></div>
+        <div class="row"><span class="dot clear"></span> Nothing found</div>
+        <div class="row"><span class="dot excluded"></span> Possibly exempt device</div>
       </div>
-      <div class="buffer-row">
-        <label for="onprem-slider">"On premises" radius</label>
-        <input type="range" id="onprem-slider" min="10" max="150" step="10" value="50" />
-        <output id="onprem-value" for="onprem-slider">50 m</output>
+      <div class="legend-group">
+        <div class="legend-sub">State shading</div>
+        <div class="legend-swatches">
+          <div class="row"><span class="swatch law"></span> Siting law</div>
+          <div class="row"><span class="swatch guideline"></span> Guideline only</div>
+          <div class="row"><span class="swatch nolaw"></span> No siting law</div>
+        </div>
+      </div>
+      <div class="legend-group">
+        <div class="legend-sub">Places</div>
+        <div class="row"><span class="icon-chip" style="background:#c2620d" aria-hidden="true"></span> Protected places <em>· zoom in</em></div>
+      </div>
+      <div class="legend-group radii">
+        <div class="legend-sub">Heuristic radii</div>
+        <div class="buffer-row">
+          <label for="buffer-slider">"Close by"</label>
+          <input type="range" id="buffer-slider" min="50" max="400" step="25" value="100" />
+          <output id="buffer-value" for="buffer-slider">100 m</output>
+        </div>
+        <div class="buffer-row">
+          <label for="onprem-slider">"On premises"</label>
+          <input type="range" id="onprem-slider" min="10" max="150" step="10" value="50" />
+          <output id="onprem-value" for="onprem-slider">50 m</output>
+        </div>
       </div>
       <details id="method-notes">
         <summary>Method notes</summary>
-        <div id="buffer-note"></div>
+        <div id="buffer-note" tabindex="0" role="region" aria-label="Method notes details"></div>
       </details>
   </aside>
 

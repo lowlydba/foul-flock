@@ -15,10 +15,14 @@ places + state boundaries from Overture Maps, matches, and emits
 Read `README.md` first. Honesty rules are non-negotiable:
 
 - Never invent a numeric distance and present it as statutory. Statutes with
-  vague language get `buffer_meters: null`, `buffer_specified: false`, and a
-  quoted `statutory_language` field. The UI labels heuristic distances.
-- Every legal claim needs `source_url` and `last_verified`.
+  vague language get `distance_basis: close_by` or `on_premises` (with
+  `buffer_meters: null`) and a quoted `statutory_language` field. The UI
+  labels heuristic distances.
+- Every legal claim needs `sources` and `last_verified`.
 - A flag is a screening candidate, never a violation determination.
+- The rules file is validated on every build and in pytest
+  (`build.validate_rules_doc`, `tests/python/test_rules.py`). Run
+  `python -m pytest tests\python` after any edit to it.
 
 ## Recurring task 1: quarterly state-law re-review
 
@@ -36,10 +40,12 @@ Procedure:
    the primary statute text whenever a state's status changed.
 3. Update `rules/alpr_state_rules.yaml`:
    - New siting law: add one rule entry per (state, restricted_category)
-     under `rules:` (copy a WA rule as a template) and REMOVE that state's
-     entry from `states_reviewed_no_siting_law`.
-   - Still no siting law: update the state's `note` if its ALPR statute
-     changed, and bump `last_verified`.
+     under `rules:` with `authority: statute` (copy the WA/VA anchors as a
+     template) and REMOVE that state's entry from `states_reviewed` (the
+     validator rejects a state that is in both).
+   - Still no siting law: update the state's `summary` if its ALPR statute
+     changed, and bump `last_verified`. Put maintainer-only caveats in
+     `maintainer_notes`; `summary` is shown to users.
    - Always bump `last_verified` on anything you actually checked.
 4. Rebuild and verify (see "Rebuild and verify" below).
 
@@ -77,7 +83,7 @@ Primary sources for the two current siting laws:
 Full research notes from the 2026-07-18 survey (per-state verdicts,
 citations, sources) are archived at
 `docs/research/state-law-survey-2026-07-18.txt`; condensed entries live in
-`rules/alpr_state_rules.yaml` under `states_reviewed_no_siting_law`. Archive
+`rules/alpr_state_rules.yaml` under `states_reviewed`. Archive
 future surveys the same way (`docs/research/state-law-survey-YYYY-MM-DD.txt`).
 
 ## Recurring task 2: data refresh
@@ -106,27 +112,73 @@ are cached and skipped.
 
 Overture notes (places, divisions): streamed from the public S3 release
 via the official `overturemaps` package; anonymous reads, no credentials.
+Reads go through the package's STAC index, which opens only the files that
+intersect the bbox so cost tracks the query area as the dataset grows; an
+unreachable index falls back to a full dataset scan.
 Places are cached per state AFTER category filtering, and the cache file
 records the category codes used, so editing `category_overture_mapping`
-self-invalidates the cache on the next online build. Divisions are probed
-with a tiny bbox at an interior point per state (INTERIOR_POINTS in
-build.py); geometry is simplified (~1 km) for the national overlay. The
-vendored taxonomy CSV and its refresh procedure live in `build/vendor/`.
+self-invalidates the cache on the next online build. A place's category
+is its `taxonomy.primary`; the vendored taxonomy (`build/vendor/`, with
+its refresh procedure) expands the anchors, and the stream warns when
+places carry codes the vendored file lacks.
+
+State boundaries are effectively static, so divisions are seeded from the
+previous build's `states.geojson`. Only a state missing from it is streamed,
+with a tiny bbox probe at an interior point (INTERIOR_POINTS in build.py).
+Each probe takes about 10 s because the full-resolution polygons are large.
+`--refresh divisions` forces a real fetch. Geometry is simplified (~1 km)
+for the national overlay.
+
+Road lookups for `road_class` guidelines are seeded the same way: cameras
+whose id and position match the previous `cameras.geojson`, evaluated under
+the same rule configuration, reuse its result, so a routine refresh only
+queries new or moved cameras. A cold run (no previous build, a changed
+`road_ref_regex`/`road_buffer_m`, or `--refresh roads`) looks up every
+camera in id chunks of 1,500 and is slow on busy Overpass mirrors;
+`data-refresh.yml` allows two hours for it. Neither `--refresh cameras` nor
+`--refresh all` redoes road lookups, so a camera judged clear keeps that
+result until it moves.
 
 ## Rules-file field reference (beyond the obvious)
 
-- `buffer_meters` - ONLY a number that appears in the statute itself.
-- `buffer_specified` - false when the law is vague/on-property; drives the
-  "heuristic" labeling in the UI.
-- `heuristic_buffer_meters` - per-rule screening override when the global
-  default is wrong for the statute's standard. Example: VA rules use 50
-  because "on or within the boundaries" is an on-property standard and the
-  wider global default produced heavy false positives. Any rule with this
-  field is governed by the UI's "on premises" slider; rules with neither a
-  statutory number nor this field use the "close by" slider.
-- `statutory_language` - short quote/paraphrase of the placement language,
-  shown to users whenever a heuristic distance is used. Note in the text if
-  it is paraphrased pending primary verification.
+`validate_rules_doc` in `build/build.py` enforces the schema on every build
+and in `tests/python/test_rules.py`; its error messages list every missing or
+inconsistent field. The file has two entry lists:
+
+- `states_reviewed` - one entry per reviewed state describing its STATUTORY
+  position (`statute_status`: `no_siting_law` or `no_alpr_statute`), with
+  `summary`, `sources`, `confidence`, and `last_verified`. A state with a
+  statutory siting rule must not appear here. A state's map status is
+  derived: statutory rules -> purple, else guideline rules -> amber, else
+  its registry entry -> grey, else no overlay (unreviewed = no claim).
+- `rules` - every rule the map visualizes, statutes and guidelines in one
+  list. `mechanism: proximity` matches cameras near places of
+  `restricted_category`; `mechanism: road_class` is covered below.
+- `authority` splits statutes from "spirit-of" guidelines (`executive_action`,
+  `statute_pending_distance`). Guidelines get the amber `guideline`
+  camera/state status, never a report letter, and never count toward
+  `rule_states`/flagged. When a guideline becomes a real statute (e.g. CT
+  sets its distance), change its `authority` to `statute` with a quoted
+  `statutory_language` and `language_verbatim`.
+- `distance_basis` picks the radius: `statutory` (`buffer_meters`, ONLY a
+  number that appears in the statute itself), `on_premises` (on-property
+  wording such as VA's "on or within the boundaries"; "on premises" slider,
+  `default_on_premises_m`), `close_by` (no distance language; "close by"
+  slider), `tbd` (law leaves the distance to be set; on-premises slider,
+  flagged loudly in the UI).
+- `mechanism: road_class` (guidelines only) tags cameras within
+  `road_buffer_m` of ways whose OSM `ref` matches `road_ref_regex`, queried
+  from Overpass in id chunks. With `grandfather_cutoff`, cameras in the
+  Overpass attic snapshot of that date are filtered out and later ones are
+  "possibly" a problem. The snapshot is cached forever per state and date.
+  `road_buffer_m` is a proximity test, so a match does not establish that a
+  camera sits in the right-of-way.
+- `summary` is public (tooltips, popups, detail panel); `maintainer_notes`
+  never leaves the YAML. `sources` is a list of `{url, type}`; the first
+  primary (else first) becomes the user-facing `source_url`.
+- `language_verbatim` - whether `statutory_language` is an exact quote; the
+  UI tags paraphrases. `date_approximate` marks an approximate
+  `effective_date`.
 - `statutory_exclusions` - device types the statute carves out of its ALPR
   definition (see WA / RCW 46.63.210). Presence of this field on any rule in
   a state activates vendor-watchlist screening for that state.
@@ -143,10 +195,11 @@ vendored taxonomy CSV and its refresh procedure live in `build/vendor/`.
   filtering. Populated by checking the `division_id` property in
   `web/data/states.geojson` after a build.
 - `category_overture_mapping` (top level) - protected category -> Overture
-  taxonomy anchor codes. A place matches when its categories.primary code
-  is an anchor or a taxonomy descendant of one (elementary_school matches
-  via school). Taxonomy is vendored at build/vendor/overture_categories.csv
-  (CC-BY-4.0); see build/vendor/README.md before changing anchors.
+  taxonomy anchor codes. A bare code matches itself and every descendant
+  (school covers elementary_school); `{code: X, descendants: false}`
+  matches only X. Taxonomy is vendored at
+  build/vendor/overture_taxonomy.csv; see build/vendor/README.md before
+  changing anchors.
 
 ## Rebuild and verify
 
@@ -255,15 +308,16 @@ Checks after any rules change:
   screenshot if the branding changes).
 - Protected places render as orange badge icons using Maki glyphs (CC0,
   https://labs.mapbox.com/maki-icons/) stored in web/assets/icons/ and
-  composed at runtime in app.js (loadPlaceIcon: white glyph on orange
-  circle). Worship icons pick christian/muslim/jewish variants from the
-  `religion` property, derived in build.py from the Overture category code
-  (RELIGION_BY_CATEGORY). To add a category, download the Maki SVG and add
+  composed at runtime in app.js (loadPlaceIcon: white glyph on an orange
+  rounded square, so places don't read as camera dots). Worship icons pick christian/muslim/jewish variants from the
+  `religion` property, derived in build.py from the place's Overture
+  taxonomy hierarchy (RELIGION_BY_ANCESTOR). To add a category, download the Maki SVG and add
   a row to PLACE_ICONS.
 - Two heuristic radii are user-adjustable at runtime (legend sliders,
   ranges in rules.json `sliders`): "close by" (default 100 m) for rules
   with no distance language, and "on premises" (default 50 m) for rules
-  with heuristic_buffer_meters (VA). The build scans candidates out to
+  with `distance_basis` `on_premises` (VA) or `tbd` (CT guideline). The
+  build scans candidates out to
   --scan-max (400 m) for all non-statutory rules and app.js recomputes
   flagged status client-side (applyBuffer). Statutory numeric distances
   are NOT affected by the sliders.

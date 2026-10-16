@@ -5,6 +5,7 @@ const COLORS = {
   flagged: "#e0332c",
   clear: "#2e7dd1",
   excluded: "#8d6e2f",
+  guideline: "#f2a900",
   law: "#8a3ffc",
   nolaw: "#9aa1a9",
 };
@@ -15,7 +16,11 @@ const CATEGORY_LABELS = {
   healthcare_facility: "healthcare facility",
   courthouse: "courthouse",
   food_bank: "food bank",
+  reproductive_health_clinic: "reproductive/sexual health facility",
+  immigrant_services: "immigrant services provider",
 };
+
+const CAM_LAYERS = ["cams-flagged", "cams-guideline", "cams-clear", "cams-excluded"];
 
 let META = null; // rules.json content
 let RULES_BY_ID = {};
@@ -58,8 +63,15 @@ async function loadPlaceIcon(map, name, file) {
   c.width = size;
   c.height = size;
   const ctx = c.getContext("2d");
+  const r = 10; // corner radius: a rounded square reads as a place, not a camera dot
+  const m = 2;
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 2, 0, Math.PI * 2);
+  ctx.moveTo(m + r, m);
+  ctx.arcTo(size - m, m, size - m, size - m, r);
+  ctx.arcTo(size - m, size - m, m, size - m, r);
+  ctx.arcTo(m, size - m, m, m, r);
+  ctx.arcTo(m, m, size - m, m, r);
+  ctx.closePath();
   ctx.fillStyle = BADGE_FILL;
   ctx.fill();
   ctx.lineWidth = 2;
@@ -118,7 +130,12 @@ map.on("load", async () => {
       "Map data unavailable (data files missing or failed to load)";
     return;
   }
-  for (const r of META.rules) RULES_BY_ID[r.rule_id] = r;
+  for (const r of [...META.rules, ...(META.guideline_rules || [])]) {
+    // Accept statute_name/statute_citation, the field names older data files use.
+    r.title ??= r.statute_name;
+    r.citation ??= r.statute_citation;
+    RULES_BY_ID[r.rule_id] = r;
+  }
   const SLIDERS = META.sliders || {
     close_by: { min: 50, max: 400, step: 25, default: META.default_heuristic_buffer_m || 100 },
     on_premises: { min: 10, max: 150, step: 10, default: 50 },
@@ -161,14 +178,18 @@ map.on("load", async () => {
 
   const cone = META.view_cone_heuristic || { half_angle_deg: 30, range_m: 60 };
   document.getElementById("buffer-note").innerHTML =
-    `<p>Screening uses each statute's numeric distance when given. When a law ` +
-    `says only "close by" or "on the premises of", the adjustable radii above ` +
-    `stand in - always labeled in results, never a legal threshold.</p>` +
-    `<p>View cones (zoom ≥ 13) show mapped camera bearing with an illustrative ` +
-    `${cone.half_angle_deg * 2}° × ${cone.range_m} m spread; OSM records bearing ` +
-    `only, not true field of view.</p>` +
-    `<p>Camera points: OSM <code>surveillance:type=ALPR</code> (DeFlock convention). ` +
-    `Built ${META.generated_at.slice(0, 10)}.</p>`;
+    `<dl>` +
+    `<dt>Distances</dt><dd>A statute's own number is used when it gives one. ` +
+    `Otherwise the radii above stand in, always labeled, never a legal threshold.</dd>` +
+    `<dt>Spirit-of (amber)</dt><dd>Not statutes: best-effort views of executive ` +
+    `actions or provisions not fully in effect. Cameras that predate a rule's ` +
+    `cutoff are filtered out; later ones are only <em>possibly</em> a problem.</dd>` +
+    `<dt>View cones</dt><dd>Zoom ≥ 13. An illustrative ` +
+    `${cone.half_angle_deg * 2}° × ${cone.range_m} m spread from the mapped ` +
+    `bearing, not true field of view.</dd>` +
+    `<dt>Data</dt><dd>OSM <code>surveillance:type=ALPR</code> ` +
+    `(DeFlock convention). Built ${META.generated_at.slice(0, 10)}.</dd>` +
+    `</dl>`;
 
   map.addSource("states", { type: "geojson", data: "data/states.geojson" });
   map.addSource("cameras", { type: "geojson", data: CAMS });
@@ -185,11 +206,13 @@ map.on("load", async () => {
       "fill-color": [
         "match", ["get", "law_status"],
         "siting_law", COLORS.law,
+        "guideline", COLORS.guideline,
         COLORS.nolaw,
       ],
       "fill-opacity": [
         "match", ["get", "law_status"],
         "siting_law", 0.38,
+        "guideline", 0.3,
         0.22,
       ],
     },
@@ -202,6 +225,7 @@ map.on("load", async () => {
       "line-color": [
         "match", ["get", "law_status"],
         "siting_law", "#5b21b6",
+        "guideline", "#a36b00",
         "#6b7280",
       ],
       "line-width": [
@@ -230,6 +254,7 @@ map.on("load", async () => {
         ["match", ["get", "category"],
           "school", "ff-school",
           "healthcare_facility", "ff-health",
+          "reproductive_health_clinic", "ff-health",
           "courthouse", "ff-court",
           "food_bank", "ff-food",
           "ff-place",
@@ -249,6 +274,7 @@ map.on("load", async () => {
       "fill-color": [
         "match", ["get", "status"],
         "flagged", COLORS.flagged,
+        "guideline", COLORS.guideline,
         COLORS.clear,
       ],
       "fill-opacity": 0.18,
@@ -283,6 +309,19 @@ map.on("load", async () => {
     },
   });
   map.addLayer({
+    id: "cams-guideline",
+    type: "circle",
+    source: "cameras",
+    filter: ["==", ["get", "status"], "guideline"],
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 3.5, 12, 7.5],
+      "circle-color": COLORS.guideline,
+      "circle-opacity": 0.9,
+      "circle-stroke-width": 1.4,
+      "circle-stroke-color": "#5c3b00",
+    },
+  });
+  map.addLayer({
     id: "cams-flagged",
     type: "circle",
     source: "cameras",
@@ -296,7 +335,7 @@ map.on("load", async () => {
     },
   });
 
-  for (const layer of ["cams-flagged", "cams-clear", "cams-excluded"]) {
+  for (const layer of CAM_LAYERS) {
     map.on("click", layer, (e) => openDetail(e.features[0]));
     map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
     map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
@@ -315,13 +354,25 @@ map.on("load", async () => {
     const p = e.features[0].properties;
     const status = p.law_status === "siting_law"
       ? "Camera-siting law in effect"
-      : "Reviewed, no siting law found";
+      : p.law_status === "guideline"
+        ? "No siting statute; spirit-of guideline mapped"
+        : "Reviewed, no siting law found";
     const checked = p.last_verified
       ? `<br><span class="pop-fine">Last checked ${esc(p.last_verified)}</span>`
       : "";
+    let detail = "";
+    if (p.law_status !== "siting_law") {
+      const note = stateSummary(p);
+      const short = note.length > 220 ? `${note.slice(0, 220).trimEnd()}...` : note;
+      const host = sourceHost(p.source_url);
+      const gl = p.guideline_title && p.guideline_title !== "null"
+        ? `<br><span class="pop-fine"><b>Guideline:</b> ${esc(p.guideline_title)}</span>` : "";
+      detail = gl + (short ? `<br><span class="pop-fine">${esc(short)}</span>` : "") +
+        (host ? `<br><span class="pop-fine">Source: ${esc(host)}</span>` : "");
+    }
     stateTip
       .setLngLat(e.lngLat)
-      .setHTML(`<b>${esc(p.name)}</b><br>${status}${checked}`)
+      .setHTML(`<b>${esc(p.name)}</b><br>${status}${checked}${detail}`)
       .addTo(map);
   });
   map.on("mouseleave", "state-fill", () => stateTip.remove());
@@ -332,7 +383,7 @@ map.on("load", async () => {
     if (map.getZoom() > 6.5) return;
     // Only when no camera was clicked on top
     const cams = map.queryRenderedFeatures(e.point, {
-      layers: ["cams-flagged", "cams-clear", "cams-excluded"],
+      layers: CAM_LAYERS,
     });
     if (cams.length) return;
     const p = e.features[0].properties;
@@ -342,7 +393,7 @@ map.on("load", async () => {
 
   map.on("click", "places-pts", (e) => {
     const cams = map.queryRenderedFeatures(e.point, {
-      layers: ["cams-flagged", "cams-clear", "cams-excluded"],
+      layers: CAM_LAYERS,
     });
     if (cams.length) return;
     const p = e.features[0].properties;
@@ -398,7 +449,10 @@ function applyBuffer(closeM, onpremM) {
       const within = (ALL_MATCHES[p.camera_id] || []).filter(
         (m) => m.distance_m <= effectiveBuffer(m)
       );
-      p.status = within.length ? "flagged" : "checked_clear";
+      const statutory = within.filter((m) => !m.guideline);
+      p.status = statutory.length ? "flagged"
+        : (within.length || p.road_flag) ? "guideline"
+        : "checked_clear";
       p.match_count = within.length;
       p.matches = JSON.stringify(within);
     }
@@ -415,31 +469,74 @@ function applyBuffer(closeM, onpremM) {
 }
 
 function updateStats() {
-  const flagged = CAMS
-    ? CAMS.features.filter((f) => f.properties.status === "flagged").length
-    : META.flagged_count;
+  const count = (s) => (CAMS
+    ? CAMS.features.filter((f) => f.properties.status === s).length
+    : (s === "flagged" ? META.flagged_count : META.guideline_count || 0));
+  const flagged = count("flagged");
+  const guide = count("guideline");
+  const gStates = META.guideline_states || [];
   document.getElementById("stats").textContent =
     `${flagged.toLocaleString()} flagged / ` +
-    `${META.camera_count.toLocaleString()} cameras · ${META.rule_states.join(", ")}`;
+    `${META.camera_count.toLocaleString()} cameras · ${META.rule_states.join(", ")}` +
+    (gStates.length
+      ? ` · ${guide.toLocaleString()} spirit-of (${gStates.join(", ")})`
+      : "");
 }
 
 function stateStatusHtml(p) {
+  if (p.law_status === "guideline") {
+    const gl = (META.guideline_rules || []).filter((r) => r.state_code === p.state_code);
+    const items = gl.map((r) => `<li><b>${esc(r.title)}</b>${r.distance_tbd ? " <b>(distance TBD)</b>" : ""}<br>${esc(r.summary)}</li>`);
+    const host = sourceHost(p.source_url);
+    return `<b>${esc(p.name)}</b><br>No siting statute. <b>Spirit-of guideline</b>
+      (not a legal threshold):<ul class="pop-list">${items.join("")}</ul>
+      <span class="pop-fine">${esc(stateSummary(p))}
+      ${p.last_verified ? `Last checked ${esc(p.last_verified)}.` : ""}</span>${host ? `<br><span class="pop-fine">Source: <a href="${esc(p.source_url)}" target="_blank" rel="noopener noreferrer">${esc(host)}</a></span>` : ""}`;
+  }
   if (p.law_status === "siting_law") {
     const rules = META.rules.filter((r) => r.state_code === p.state_code);
-    const names = [...new Set(rules.map((r) => r.statute_name))].join("; ");
+    const names = [...new Set(rules.map((r) => r.title))].join("; ");
     return `<b>${esc(p.name)}</b><br>Siting law in effect: ${esc(names)}
       ${p.last_verified ? `<br><span class="pop-fine">Last checked ${esc(p.last_verified)}</span>` : ""}`;
   }
+  const host = sourceHost(p.source_url);
+  const src = host
+    ? `<br><span class="pop-fine">Source: <a href="${esc(p.source_url)}" target="_blank" rel="noopener noreferrer">${esc(host)}</a></span>`
+    : "";
   return `<b>${esc(p.name)}</b><br>Reviewed - no siting-specific ALPR law found.<br>
-    <span class="pop-fine">${esc(p.note || "")}
-    ${p.last_verified ? `Last checked ${esc(p.last_verified)}.` : ""}</span>`;
+    <span class="pop-fine">${esc(stateSummary(p))}
+    ${p.last_verified ? `Last checked ${esc(p.last_verified)}.` : ""}</span>${src}`;
+}
+
+// MapLibre hands null feature properties back as the string "null".
+function cleanProps(props) {
+  return Object.fromEntries(
+    Object.entries(props).map(([k, v]) => [k, v === "null" ? null : v])
+  );
+}
+
+// A state's public summary; older data files call it note.
+function stateSummary(p) {
+  const s = p.summary ?? p.note;
+  return s && s !== "null" ? s : "";
+}
+
+// Hostname of an http(s) source URL, or "" for anything else.
+function sourceHost(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.hostname : "";
+  } catch {
+    return "";
+  }
 }
 
 /* ------------------------------- detail panel ------------------------- */
 
 function openDetail(feature) {
-  const p = feature.properties;
+  const p = cleanProps(feature.properties);
   const matches = JSON.parse(p.matches || "[]");
+  const statutoryMatches = matches.filter((m) => !m.guideline);
   const coords = feature.geometry.coordinates;
   const el = document.getElementById("detail-body");
 
@@ -447,6 +544,7 @@ function openDetail(feature) {
     <h2>ALPR camera</h2>
     <span class="status-badge ${p.status}">
       ${p.status === "flagged" ? "⚑ Flagged for review"
+        : p.status === "guideline" ? "◐ Spirit-of guideline (not a statute)"
         : p.status === "possible_exclusion" ? "Possibly exempt device type"
         : "Checked - nothing found"}
     </span>
@@ -462,7 +560,7 @@ function openDetail(feature) {
       (r) => r.state_code === p.state_code && r.statutory_exclusions
     );
     html += `<h3>Why it's flagged</h3>`;
-    for (const m of matches) {
+    for (const m of statutoryMatches) {
       const rule = RULES_BY_ID[m.rule_id] || {};
       html += `
         <div class="match-card">
@@ -472,11 +570,11 @@ function openDetail(feature) {
             ${m.buffer_specified ? "" : `<span class="heuristic-tag">heuristic ${effectiveBuffer(m)} m - not a statutory distance</span>`}
           </div>
           ${m.buffer_specified || !rule.statutory_language ? "" : `
-          <div class="statute-quote">What the law actually says:
+          <div class="statute-quote">What the law actually says${rule.language_verbatim === false ? " (paraphrased)" : ""}:
             <span class="lang">${esc(rule.statutory_language)}</span></div>`}
           <div class="cite">
-            ${esc(rule.statute_name || m.rule_id)} - ${esc(rule.statute_citation || "")}<br>
-            Effective ${esc(String(rule.effective_date || "?"))} ·
+            ${esc(rule.title || m.rule_id)} - ${esc(rule.citation || "")}<br>
+            Effective ${esc(fmtDate(rule))} ·
             <a href="${esc(rule.source_url || "#")}" target="_blank" rel="noopener">statute source</a>
           </div>
         </div>`;
@@ -495,6 +593,8 @@ function openDetail(feature) {
           <button id="dl-report">Download .txt</button>
         </div>
       </div>`;
+  } else if (p.status === "guideline") {
+    html += guidelineHtml(p, matches);
   } else if (p.status === "possible_exclusion") {
     html += `
       <h3>Why it isn't flagged</h3>
@@ -508,8 +608,13 @@ function openDetail(feature) {
     const cats = [...new Set(stateRules.map((r) => CATEGORY_LABELS[r.restricted_category] || r.restricted_category))];
     html += `
       <h3>What was checked</h3>
-      <p>This state has a siting law. No mapped ${esc(cats.join(", "))} was found within
-      the screened distance.</p>
+      <p>${stateRules.length
+        ? `This state has a siting law. No mapped ${esc(cats.join(", "))} was found within
+      the screened distance.`
+        : `This state has no siting statute. Nothing matched its spirit-of guideline.`}</p>
+      ${p.road_phase === "existing" ? `<p>On a state road (${esc(p.road_ref)}), but already mapped before the
+      ${esc(guidelineCutoff(p))} permit pause, so it is treated as an existing installation
+      and not flagged.</p>` : ""}
       <p class="fine">Mapped data is incomplete - absence of a flag is not a compliance
       certification.</p>`;
   }
@@ -522,7 +627,7 @@ function openDetail(feature) {
     btn.addEventListener("click", () => {
       const box = document.getElementById("report-box");
       box.classList.remove("hidden");
-      document.getElementById("report-text").value = draftReport(p, coords, matches);
+      document.getElementById("report-text").value = draftReport(p, coords, statutoryMatches);
       box.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
     document.getElementById("copy-report")?.addEventListener("click", async (ev) => {
@@ -539,6 +644,65 @@ function openDetail(feature) {
       URL.revokeObjectURL(a.href);
     });
   }
+}
+
+function guidelineCutoff(p) {
+  const r = RULES_BY_ID[p.road_rule_id] || {};
+  return String(r.grandfather_cutoff || "pause").slice(0, 10);
+}
+
+// Detail body for "spirit-of" cameras: executive actions or pending
+// provisions, never a violation claim and never a report letter.
+function guidelineHtml(p, matches) {
+  let html = `<div class="guideline-banner"><b>Not a statute, not a violation.</b>
+    A best-effort "spirit-of" view of an executive action or a provision that
+    is not fully operative yet. Verify everything before acting.</div>`;
+  const road = RULES_BY_ID[p.road_rule_id];
+  if (p.road_flag && road) {
+    const cutoff = guidelineCutoff(p);
+    const why = p.road_phase === "new"
+      ? `First appears in OpenStreetMap after the ${esc(cutoff)} pause. It may be a new
+         installation, or an older camera that was mapped late: <b>possibly</b> a problem.`
+      : p.road_phase === "unknown"
+        ? `The pre-pause map snapshot was unavailable, so we cannot tell whether this camera
+           already existed on ${esc(cutoff)}.`
+        : `Removal from state highways was required by
+           ${esc(fmtDate({ effective_date: road.compliance_deadline || road.effective_date, date_approximate: !road.compliance_deadline && road.date_approximate }))}.
+           A camera still mapped here is either stale map data or still installed.`;
+    html += `<h3>Why it's shown</h3>
+      <div class="match-card guideline">
+        <div>Within ${esc(road.road_buffer_m)} m of a mapped state road${p.road_ref ? ` (<span class="place">${esc(p.road_ref)}</span>)` : ""}. That does not establish it sits in the right-of-way.</div>
+        <div class="statute-quote">${why}</div>
+        <div class="cite">${esc(road.title)} · effective ${esc(fmtDate(road))} ·
+          <a href="${esc(road.source_url || "#")}" target="_blank" rel="noopener">source</a><br>
+          ${esc(road.summary)}</div>
+      </div>`;
+  }
+  const poi = matches.filter((m) => m.guideline);
+  if (poi.length) {
+    html += `<h3>Why it's shown</h3>
+      <div class="guideline-banner tbd"><b>Distance TBD.</b> Connecticut's POST Council
+      has not set the protective distance, and only facilities that registered with the
+      Council are covered, so these places may not be covered at all. The
+      ${effectiveBuffer(poi[0])} m radius is ours, and these categories are best-effort
+      matches.</div>`;
+    for (const m of poi) {
+      const rule = RULES_BY_ID[m.rule_id] || {};
+      html += `
+        <div class="match-card guideline">
+          <div><span class="dist">${Math.round(m.distance_m)} m</span> from
+            <span class="place">${esc(m.place_name)}</span>
+            (${esc(CATEGORY_LABELS[m.place_category] || m.place_category)})
+            <span class="heuristic-tag">heuristic ${effectiveBuffer(m)} m - distance TBD</span>
+          </div>
+          <div class="cite">${esc(rule.title || m.rule_id)} ·
+            <a href="${esc(rule.source_url || "#")}" target="_blank" rel="noopener">statute source</a></div>
+        </div>`;
+    }
+  }
+  html += `<p class="fine">Crowdsourced camera data. A fixed reader is assumed; OSM does not
+    reliably distinguish mobile units.</p>`;
+  return html;
 }
 
 function draftReport(p, coords, matches) {
@@ -561,17 +725,23 @@ function draftReport(p, coords, matches) {
     `approximately ${Math.round(m.distance_m)} meters from ${m.place_name},`,
     `a ${CATEGORY_LABELS[m.place_category] || m.place_category}.`,
     "",
-    `${rule.statute_name || "State law"} (${rule.statute_citation || "citation"},`,
-    `effective ${rule.effective_date || "[date]"}) restricts the placement of ALPR`,
+    `${rule.title || "State law"} (${rule.citation || "citation"},`,
+    `effective ${rule.effective_date ? fmtDate(rule) : "[date]"}) restricts the placement of ALPR`,
     `equipment on or near locations of this kind.`,
   ];
   if (!m.buffer_specified) {
+    const paraphrased = rule.language_verbatim === false;
     lines.push(
       "",
-      "Note: the statute does not specify a numeric distance; the",
+      paraphrased
+        ? "Note: the bill summary I reviewed does not specify a numeric distance; the"
+        : "Note: the statute does not specify a numeric distance; the",
       `${effectiveBuffer(m)}-meter figure above is a proximity estimate used for screening,`,
       "not a statutory threshold. The relevant statutory language is:",
       `  ${rule.statutory_language || "[quote the statute's placement language here]"}`,
+      ...(paraphrased
+        ? ["  (paraphrased from a summary of the bill; not checked against the enacted text)"]
+        : []),
       "I raise this for your review of whether the placement complies with",
       "that language."
     );
@@ -616,6 +786,12 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
   );
+}
+
+// ISO date for display, prefixed "about" when the rule marks it approximate.
+function fmtDate(rule) {
+  const d = String(rule.effective_date || "?").slice(0, 10);
+  return rule.date_approximate ? `about ${d}` : d;
 }
 
 document.getElementById("detail-close").addEventListener("click", () =>
