@@ -62,6 +62,12 @@ jobs:
       - name: Tune npm for CI
         uses: lowlydba/sustainable-npm@4cc1da285e5a589a7b3816122f791c21ec6ff3e6 # v4.0.0
 
+      - name: Install test dependencies
+        run: npm ci
+
+      - name: Install Chrome for map tests
+        run: npx --no-install puppeteer browsers install chrome
+
       - name: Stage fixture data
         run: |
           mkdir -p web/data
@@ -80,9 +86,7 @@ jobs:
       - name: Run map regression tests
         env:
           A11Y_SCHEME: ${{ matrix.scheme }}
-        run: |
-          npm ci
-          npm run test:map
+        run: npm run test:map
 
       - name: Run pa11y-ci
         id: pa11y
