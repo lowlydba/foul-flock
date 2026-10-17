@@ -32,13 +32,14 @@ module.exports = {
   },
   // Desktop is the default viewport; phone and tablet exercise the
   // responsive layouts. The About dialog holds the how-it-works prose, so
-  // it is scanned open at each size too.
+  // it is scanned open at each size too. pa11y-ci-action rejects repeated
+  // URLs, so each scenario gets its own (ignored) query string.
   urls: [
     { url: `${base}/` },
-    { url: `${base}/`, viewport: phone },
-    { url: `${base}/`, viewport: tablet },
-    { url: `${base}/`, actions: openAbout },
-    { url: `${base}/`, viewport: phone, actions: openAbout },
-    { url: `${base}/`, viewport: tablet, actions: openAbout },
+    { url: `${base}/?scan=phone`, viewport: phone },
+    { url: `${base}/?scan=tablet`, viewport: tablet },
+    { url: `${base}/?scan=about`, actions: openAbout },
+    { url: `${base}/?scan=about-phone`, viewport: phone, actions: openAbout },
+    { url: `${base}/?scan=about-tablet`, viewport: tablet, actions: openAbout },
   ],
 };
