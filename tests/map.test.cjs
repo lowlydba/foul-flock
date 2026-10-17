@@ -93,6 +93,17 @@ afterEach(async () => {
   if (page) await page.close();
 });
 
+// Bounded wait until a camera dot is drawn at `coords`. map.once("idle") is
+// unbounded and never resolves while any source keeps loading.
+async function waitForRenderedCamera(coords, layer) {
+  await page.waitForFunction((c, l) => {
+    const m = window.__ff.map;
+    if (!m.getLayer(l)) return false;
+    const q = m.project(c);
+    return m.queryRenderedFeatures([[q.x - 2, q.y - 2], [q.x + 2, q.y + 2]], { layers: [l] }).length > 0;
+  }, {}, coords, layer);
+}
+
 for (const fontScale of [1, 2]) {
   test(`popup close control stays compact at ${fontScale * 100}% text size`, HARD_TIMEOUT, async () => {
     const layout = await page.evaluate((scale) => {
@@ -313,10 +324,7 @@ test("'Nothing found' cameras are off by default and read from static tiles", HA
 
   // At state zoom the tile geometry is rounded to tens of meters, but the
   // detail panel must still show the camera's exact position.
-  await page.evaluate(() => new Promise((r) => {
-    window.__ff.map.once("idle", r);
-    window.__ff.map.triggerRepaint(); // idle fires after the next frame even if already settled
-  }));
+  await waitForRenderedCamera(camera, "cams-clear-far");
   const lowPt = await page.evaluate((c) => window.__ff.map.project(c), camera);
   await page.mouse.click(lowPt.x, lowPt.y);
   await page.waitForSelector("#detail:not(.hidden)");
@@ -330,7 +338,7 @@ test("'Nothing found' cameras are off by default and read from static tiles", HA
     "clear-cones", { sourceLayer: "clear_cones" }).length > 0);
 
   // Clicking a tile-backed camera opens the same detail panel.
-  await page.evaluate(() => new Promise((r) => window.__ff.map.once("idle", r)));
+  await waitForRenderedCamera(camera, "cams-clear-far");
   const pt = await page.evaluate((c) => window.__ff.map.project(c), camera);
   await page.mouse.click(pt.x, pt.y);
   await page.waitForSelector("#detail:not(.hidden)");
@@ -549,15 +557,15 @@ for (const mode of MODES) {
 
   test(`${mode.name}: tapping near a camera opens it, and a11y holds with panels open`, HARD_TIMEOUT, async () => {
     await reloadAs(mode.viewport);
-    const target = await page.evaluate(async () => {
+    const coords = await page.evaluate(async () => {
       const gj = await (await fetch("data/cameras.geojson")).json();
       const f = gj.features.find((x) => x.properties.status === "flagged");
       window.__ff.map.jumpTo({ center: f.geometry.coordinates, zoom: 14 });
-      await new Promise((r) => window.__ff.map.once("idle", r));
-      const p = window.__ff.map.project(f.geometry.coordinates);
-      return { x: p.x + 14, y: p.y + 10, id: f.properties.camera_id };
+      return f.geometry.coordinates;
     });
-    await page.touchscreen.tap(target.x, target.y);
+    await waitForRenderedCamera(coords, "cams-flagged");
+    const p = await page.evaluate((c) => window.__ff.map.project(c), coords);
+    await page.touchscreen.tap(p.x + 14, p.y + 10);
     await page.waitForSelector("#detail:not(.hidden)");
     const results = await pa11y(base, {
       browser, page, ignoreUrl: true,
