@@ -1,194 +1,72 @@
-# Foul Flock · ALPR Siting Compliance Map
+# Foul Flock
 
 ![Foul Flock: checks crowdsourced license-plate camera locations against state placement laws](web/assets/og-image.png)
 
-Live at [www.foulflock.com](https://www.foulflock.com). Made by
-[lowlydba](https://github.com/lowlydba).
+Find license-plate cameras that may sit where state law says they shouldn't.
+
+[Open the map at www.foulflock.com](https://www.foulflock.com)
+
+Automated license plate readers (ALPRs) photograph every passing car and log where it was. A few states have decided these cameras don't belong near schools, places of worship, clinics, and similar places. Those laws only matter if someone checks, and checking by hand means reading statutes and measuring distances one camera at a time.
+
+Foul Flock does the measuring. It cross-references crowdsourced camera locations against a hand-curated table of state camera-siting laws and flags every camera close enough to a protected place to deserve a second look.
 
 ![A flagged camera in Spokane, WA, with the legend and the matched protected places](docs/images/flagged-camera.png)
 
-A small, fully static map that cross-references crowdsourced ALPR camera
-locations (OpenStreetMap, [DeFlock](https://deflock.me) tagging convention)
-against a hand-curated table of **state camera-siting statutes**, and flags
-cameras sitting within a screened distance of a protected place: schools,
-places of worship, healthcare facilities, courts, food banks.
+## Using the map
 
-A few states have decided license-plate cameras don't belong near certain
-places. Laws like that only matter if someone checks, and checking by hand
-is slow enough that it rarely happens. This map automates the tedious
-part.
+Zoom into a purple state. Red dots are cameras near a school, place of worship, healthcare facility, court, or food bank. Click one to see the distance, the statute citation, and the law's placement language quoted word for word.
 
-To be clear about what it is: a **screening tool for advocacy and
-compliance research**. Not a router, not a camera-avoidance app, and
-**not legal advice**. Every flag carries a statute citation and the law's
-own placement language, and the UI walks the user toward a verify-first
-inquiry or records-request letter. Rule provenance (`confidence`,
-`last_verified`) stays in the rules file for maintainers; the UI
-deliberately doesn't dress heuristic candidates up as verified findings.
+Some laws say "immediately surrounding" instead of giving a number. For those, two sliders in the legend set what counts as close, and results that rely on them are labeled.
 
-## What the colors mean
+"Draft report" turns a flag into a starting-point records or relocation request, which you fill in with facts you've checked yourself. If a camera is in the wrong spot, its detail panel links to the OpenStreetMap node so you can fix it there.
 
-The map deliberately distinguishes:
+## What's on the map
 
-1. 🔴 **Flagged** - camera sits within the screened distance of a protected
-   place. Comes with the statute citation; needs human verification.
-2. 🔵 **Checked, nothing found** - a siting law exists in this state, and no
-   mapped protected place turned up within the screened distance.
-3. ⚪ **Reviewed, no siting law** - grey on the map, with a last-checked
-   date on hover. States that haven't been reviewed get no overlay at all,
-   because "we looked and there's nothing" and "we haven't looked" are
-   different claims.
-4. 🟠 **Spirit-of guideline** - amber. Not a siting statute: an executive
-   action or not-yet-operative provision the map visualizes best-effort
-   (rules with a non-statute `authority` in the rules file). Depending on the rule, cameras
-   are flagged for sitting on state-maintained roads or near best-effort
-   matches for a protected place type. Where a rule has a grandfather date,
-   cameras already mapped before it are filtered out and later ones are
-   only *possibly* a problem (mapping date is not install date). Rules
-   whose distance isn't set yet are labeled as such. Never produces a
-   report letter.
+| Color | Meaning |
+|---|---|
+| Red camera | Within the screened distance of a protected place, in a state with a siting law |
+| Blue camera | Checked against a siting law, nothing mapped nearby (hidden until you turn on "Cameras with nothing found") |
+| Amber camera | Matches a spirit-of guideline, not a statute; never produces a report letter |
+| Purple state | Has an ALPR siting statute |
+| Amber state | No siting statute, but an executive action or not-yet-operative provision in the same spirit |
+| Grey state | Reviewed, no siting law |
+| No shading | Not reviewed, so no claim either way |
 
-## Heuristic distances
+Siting statutes currently on the map are Washington's Driver Privacy Act and Virginia's HB 2724. Florida, Texas, and Connecticut show as amber guidelines. Every other state and DC has been reviewed and has no siting law; the per-state notes and sources live in [rules/alpr_state_rules.yaml](rules/alpr_state_rules.yaml).
 
-When a statute uses vague language ("immediately surrounding") instead of
-a number, the build applies a configurable **"close by" default of 100 m**.
-That number is ours, not the law's, and the UI labels it as such everywhere
-it appears (`distance_basis: close_by` in the rules file).
+## Read before acting on anything here
 
-Two legend sliders adjust the heuristics live, no rebuild needed (the build
-pre-computes candidates out to `--scan-max`, 400 m):
+> [!IMPORTANT]
+> Foul Flock is a screening tool for advocacy and compliance research. It isn't legal advice, a router, or a camera-avoidance app.
 
-- **"Close by"** (50-400 m, default 100) for statutes with no distance
-  language at all.
-- **"On premises"** (10-150 m, default 50) for on-property language like
-  VA's "on or within the boundaries of" (`distance_basis: on_premises` in
-  the rules file).
+- A flag is a candidate for human verification, never a violation determination. Verify the camera, the place, and the current statute text before contacting any agency.
+- Camera positions are crowdsourced and can be wrong, stale, or mis-tagged. Place data has the same problem.
+- Some distances are ours, not the law's. When a statute gives no number, the map uses an adjustable radius and labels it everywhere it appears.
+- Siting-specific ALPR laws are rare. Most state ALPR statutes govern data retention and access, not placement.
 
-Statutory numeric distances are fixed and unaffected by either slider.
-Change the defaults with `--default-buffer` / `default_heuristic_buffer_m`
-and `default_on_premises_m` in `rules/alpr_state_rules.yaml`.
+## How it works
 
-Whenever a heuristic distance is used, the UI and the drafted report letter
-also quote the statute's actual placement language ("on or immediately
-surrounding", "on or within the boundaries of", etc.) from the
-`statutory_language` field, so the on-property vs. nearby distinction is
-never hidden behind an invented number.
+A Python build pulls ALPR cameras from OpenStreetMap (the [DeFlock](https://deflock.me) tagging convention) and protected places and state boundaries from Overture Maps, matches them against the rules file, and writes static GeoJSON and map tiles. The site is plain [MapLibre](https://maplibre.org) on GitHub Pages: no backend, no runtime API calls, no tracking. A scheduled workflow refreshes cameras weekly and Overture data monthly.
 
-## View cones
+Big thanks to [PMTiles](https://github.com/protomaps/PMTiles) from Protomaps. States, protected places, and the tens of thousands of cameras with nothing nearby each ship as a single PMTiles archive, and the browser fetches only the tiles in view by HTTP range request, so a nationwide map runs off static hosting with no tile server.
 
-Where OSM records a `camera:direction` bearing, the map draws an
-illustrative view cone (60 degrees wide, 60 m deep, zoom in to see them).
-OSM has no field-of-view width/range tags for ALPRs, so cones show mapped
-bearing only - they are not real detection zones.
+## Docs
 
-## Layout
+- [How the map works](docs/how-it-works.md): statuses, heuristic distances, view cones, data sources
+- [Development](docs/development.md): repo layout, building, testing, CI
+- [Maintaining the rules file](docs/rules-file.md): how laws get added and re-reviewed
+- [AGENTS.md](AGENTS.md): the full maintenance runbook and rules-file schema
 
-```
-rules/alpr_state_rules.yaml   Hand-curated legal core. Never scraped/automated.
-build/build.py                Entry point: fetch (cached) -> match -> emit web/data/ (GeoJSON + PMTiles)
-build/foulflock/              The build pipeline, one module per concern (see AGENTS.md)
-build/vectortiles.py          Tiler + PMTiles writer for the map's static layers
-build/vendor/                 Pinned Overture places taxonomy (CC-BY-4.0)
-web/                          Static MapLibre app: js/ (ES modules), css/ (no backend, no runtime APIs)
-docs/research/                Archived state-law survey outputs
-cache/                        Overpass + Overture response cache (safe to delete)
-AGENTS.md                     Maintenance runbook (state re-reviews, overrides)
-```
-
-## Build & run
-
-```powershell
-pip install -r build\requirements.txt
-python build\build.py                        # fetches (cached), then matches
-node tests\serve.cjs 8080 web                # then open http://localhost:8080
-```
-
-Useful flags: `--offline` (cache only), `--refresh [scope]` (ignore cache
-and refetch; scope is `all` or a comma-separated subset of
-`cameras,places,divisions`), `--states WA` (subset).
-
-A scheduled workflow (`.github/workflows/data-refresh.yml`) refreshes
-cameras weekly and Overture places/divisions monthly (matching Overture's
-monthly release cadence), then opens a PR with the regenerated
-`web/data/*`, so the published data stays current without manual runs.
-
-### Tests
-
-The Python build pipeline is unit-tested with pytest, and WCAG 2.1 A/AA is
-asserted with axe-core via pa11y-ci in both light and dark color schemes
-(see AGENTS.md for the theming rules):
-
-```powershell
-pip install -r tests\python\requirements.txt
-python -m pytest tests\python
-
-npm ci
-node tests\serve.cjs 8081 web      # in a second terminal
-$env:A11Y_SCHEME = "dark"          # or "light" (default)
-npm run test:a11y
-npm run test:map
-```
-
-Popup sizing, dismissal, and viewport-aware zoom limits have browser regression tests through Node's test runner and Puppeteer.
-
-CI runs these suites on every push/PR (`.github/workflows/ci.yml`, pa11y-ci
-via [lowlysre/pa11y-ci-action](https://github.com/lowlysre/pa11y-ci-action)
-against fixture data in `tests/fixtures/data`) and rolls them into a
-single required check. Workflow security is linted by zizmor at its
-pedantic persona (`.github/workflows/zizmor.yml`), and dependabot watches
-actions, npm, and pip weekly.
-
-## Data sources
-
-| Source | Provides | License |
-|---|---|---|
-| OpenStreetMap via Overpass | ALPR camera nodes (`surveillance:type=ALPR`, DeFlock convention) | ODbL |
-| Overture Maps places theme | Protected places (schools, worship, healthcare, courts, food banks) | CDLA-Permissive-2.0 |
-| Overture Maps divisions theme | State boundary polygons + GERS division IDs | Contains OSM data: ODbL |
-| Overture places taxonomy (vendored, `build/vendor/`) | Category codes mapped to the five protected categories | CC-BY-4.0 |
-| `rules/alpr_state_rules.yaml` | Hand-curated statutes, buffers, citations | Project |
-
-Places and divisions are streamed per state from the Overture S3 release
-via the official [`overturemaps`](https://github.com/OvertureMaps/overturemaps-py)
-package (anonymous reads, no credentials) and filtered locally against the
-vendored taxonomy; category-to-protected-place mapping lives in
-`category_overture_mapping` in the rules YAML. Cameras stay on
-OSM/Overpass because Overture has no ALPR layer. `state_division_id` on
-each rule records the state's Overture GERS division ID.
+Found a wrong place or a missing law? [Open an issue](https://github.com/lowlydba/foul-flock/issues) with a link to the statute or the place.
 
 ## License
 
-Code is [MIT](LICENSE). The data is not: OSM-derived files (cameras, and
-state boundaries via Overture divisions) remain under
-[ODbL 1.0](https://opendatacommons.org/licenses/odbl/) © OpenStreetMap
-contributors, and Overture places remain under
-[CDLA-Permissive-2.0](https://cdla.dev/permissive-2-0/) © Overture Maps
-Foundation. The build stamps a `DATA_LICENSE.txt` into `web/data/`
-alongside the artifacts, and the vendored taxonomy in `build/vendor/` is
-CC-BY-4.0. Keep those notices intact when redistributing.
+Code is [MIT](LICENSE). The data is not:
 
-## Maintaining the rules file
+- Cameras, and state boundaries via Overture divisions, are OSM-derived and remain under [ODbL 1.0](https://opendatacommons.org/licenses/odbl/) © OpenStreetMap contributors.
+- Overture places remain under [CDLA-Permissive-2.0](https://cdla.dev/permissive-2-0/) © Overture Maps Foundation.
+- The vendored Overture taxonomy in `build/vendor/` is CC-BY-4.0.
 
-- Human-authored only. **Do not scrape legal text.**
-- The schema is documented in `AGENTS.md` and enforced on every build and
-  in `tests/python/test_rules.py`.
-- Every entry needs `sources`, `confidence`
-  (`verified`/`inferred`/`needs_review`), and `last_verified`.
-- Re-review quarterly - ALPR siting law is an actively moving target.
-- If a statute gives no numeric distance, set `buffer_meters: null` and a
-  non-statutory `distance_basis`; never invent a number and present it as
-  law.
+The build stamps a `DATA_LICENSE.txt` into `web/data/` alongside the artifacts. Keep those notices intact when redistributing.
 
-## Honesty notes
-
-These are load-bearing, not boilerplate:
-
-- Siting-specific ALPR laws are rare; most state ALPR statutes govern
-  retention/access, not placement.
-- Camera positions are crowdsourced and can be wrong, stale, or mis-tagged.
-- A flag is a *candidate for human verification*, never a violation
-  determination. Verify camera, place, and current statute text before
-  contacting any agency.
-- Camera data © OpenStreetMap contributors (ODbL). Places and boundaries
-  © Overture Maps Foundation (places CDLA-Permissive-2.0; divisions
-  contain OSM data, ODbL).
+Made by [lowlydba](https://github.com/lowlydba).

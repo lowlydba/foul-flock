@@ -42,7 +42,8 @@ changing.
   whole package as one namespace and routes monkeypatches to the defining
   module.
 
-Read `README.md` first. Honesty rules are non-negotiable:
+Read `README.md` and `docs/how-it-works.md` first (`docs/development.md`
+covers layout, build, and tests). Honesty rules are non-negotiable:
 
 - Never invent a numeric distance and present it as statutory. Statutes with
   vague language get `distance_basis: close_by` or `on_premises` (with
@@ -78,6 +79,8 @@ Procedure:
      `maintainer_notes`; `summary` is shown to users.
    - Always bump `last_verified` on anything you actually checked.
 4. Rebuild and verify (see "Rebuild and verify" below).
+5. If the set of statute or guideline states changed, update the coverage
+   line under "What's on the map" in `README.md`.
 
 States most likely to change (active bills as of mid-2026): CA (vetoed
 SB 274 may return), CO (SB 26-070 lost, may return), and any state listed
