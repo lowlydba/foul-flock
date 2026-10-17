@@ -159,7 +159,7 @@ test("detail panel shows when the camera was last edited in OSM, and the letter 
     line: el.parentElement.textContent.replace(/\s+/g, " ").trim(),
   }));
   assert.equal(row.datetime, "2025-03-14");
-  assert.match(row.line, /^Last edited: 2025-03-14 \(\d+ (months|years) ago, in OpenStreetMap\)$/);
+  assert.match(row.line, /^Last edited: 2025-03-14 \(\d+ (months|years) ago\)$/);
   await page.click("#draft-report");
   assert.match(await page.$eval("#report-text", (el) => el.value),
     /Camera source: .+node\/\d+ \(© OpenStreetMap contributors\), record last edited 2025-03-14\./);
@@ -311,7 +311,7 @@ test("'Nothing found' cameras are off by default and read from static tiles", HA
   await page.waitForSelector("#detail:not(.hidden)");
   assert.match(await page.$eval("#detail", (el) => el.textContent), /nothing found/i);
   assert.match(await page.$eval("#detail", (el) => el.textContent),
-    /Last edited:\s*2026-01-05 \(.+, in OpenStreetMap\)/);
+    /Last edited:\s*2026-01-05 \(.+\)/);
   const where = await page.$eval("#detail .kv", (el) => el.textContent);
   const [lat, lon] = where.match(/-?\d+\.\d+/g).map(Number);
   assert.ok(Math.abs(lat - camera[1]) < 1e-4 && Math.abs(lon - camera[0]) < 1e-4,
