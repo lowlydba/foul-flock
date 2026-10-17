@@ -42,7 +42,8 @@ changing.
   whole package as one namespace and routes monkeypatches to the defining
   module.
 
-Read `README.md` first. Honesty rules are non-negotiable:
+Read `README.md` and `docs/how-it-works.md` first (`docs/development.md`
+covers layout, build, and tests). Honesty rules are non-negotiable:
 
 - Never invent a numeric distance and present it as statutory. Statutes with
   vague language get `distance_basis: close_by` or `on_premises` (with
