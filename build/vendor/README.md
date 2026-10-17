@@ -8,7 +8,7 @@ The Overture places taxonomy: one row per category code, with its path from the 
 - Pinned at commit `a9004e530a60fcc18af80ac279790ea290852763`
 - License: the OvertureMaps/docs repository is MIT; Overture publishes its schema under CC-BY-4.0. The attribution lives in the repo README and the data license notice.
 
-`build/build.py` parses the CSV into a code to path map, and uses it to expand the anchors in `category_overture_mapping` (`rules/alpr_state_rules.yaml`) into the protected categories. A place matches through its `taxonomy.primary` code. The build also checks every anchor against this file and warns when streamed places carry codes it doesn't list.
+`build/foulflock/overture.py` parses the CSV into a code to path map, and uses it to expand the anchors in `category_overture_mapping` (`rules/alpr_state_rules.yaml`) into the protected categories. A place matches through its `taxonomy.primary` code. The build also checks every anchor against this file and warns when streamed places carry codes it doesn't list.
 
 ### Refreshing
 
