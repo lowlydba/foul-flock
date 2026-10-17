@@ -4,9 +4,12 @@ division polygons, and per-state protected-place streams."""
 from __future__ import annotations
 
 import csv
+import io
 import json
 import re
 import sys
+import time
+import urllib.request
 from collections import defaultdict
 
 from . import config
@@ -128,6 +131,86 @@ def build_name_lookup(cat_mapping: dict[str, list],
     return dict(out)
 
 
+STAC_INDEX_URL = "https://stac.overturemaps.org/{release}/collections.parquet"
+# Seconds between attempts at the STAC index; Retry-After can lengthen one.
+STAC_RETRY_WAITS = (10, 30, 90)
+
+_STAC_INDEX: dict[str, object] = {}
+
+
+def _http_get(url: str) -> bytes:
+    with urllib.request.urlopen(url, timeout=60) as resp:
+        return resp.read()
+
+
+def _stac_index(release: str):
+    """The release's STAC index (one row per data file, with its bbox),
+    downloaded once per build. overturemaps re-downloads it on every
+    stac=True query (OvertureMaps/overturemaps-py#150), and a build's ~100
+    queries in a row get HTTP 429 from the STAC host. None when the index
+    stays unreachable after retries."""
+    if release in _STAC_INDEX:
+        return _STAC_INDEX[release]
+    import pyarrow.parquet as pq
+
+    url = STAC_INDEX_URL.format(release=release)
+    table = None
+    for attempt in range(len(STAC_RETRY_WAITS) + 1):
+        try:
+            table = pq.read_table(io.BytesIO(_http_get(url)))
+            break
+        except Exception as e:  # noqa: BLE001
+            code = getattr(e, "code", None)
+            retryable = isinstance(e, OSError) and (
+                code is None or code == 429 or code >= 500)
+            if not retryable or attempt == len(STAC_RETRY_WAITS):
+                print(f"    STAC index unavailable ({e}); "
+                      "scanning full datasets instead")
+                break
+            wait = STAC_RETRY_WAITS[attempt]
+            retry_after = (getattr(e, "headers", None) or {}).get("Retry-After")
+            if retry_after and str(retry_after).isdigit():
+                wait = max(wait, min(int(retry_after), 300))
+            print(f"    STAC index fetch failed ({e}); retrying in {wait}s")
+            time.sleep(wait)
+    _STAC_INDEX[release] = table
+    return table
+
+
+def _stac_files(index, overture_type: str, bbox: tuple) -> list[str]:
+    """S3 bucket/key paths of the type's files whose bbox meets bbox."""
+    import pyarrow.compute as pc
+
+    xmin, ymin, xmax, ymax = bbox
+    hits = index.filter(
+        (pc.field("collection") == overture_type)
+        & (pc.field("type") == "Feature")
+        & (pc.field("bbox", "xmin") < xmax) & (pc.field("bbox", "xmax") > xmin)
+        & (pc.field("bbox", "ymin") < ymax) & (pc.field("bbox", "ymax") > ymin))
+    return [a["aws"]["alternate"]["s3"]["href"].removeprefix("s3://")
+            for a in hits.column("assets").to_pylist()]
+
+
+def _files_reader(files: list[str], bbox: tuple):
+    """Non-empty batches from the given Overture files, rows inside bbox."""
+    import pyarrow.compute as pc
+    import pyarrow.dataset as ds
+    import pyarrow.fs as fs
+
+    if not files:
+        return iter(())
+    xmin, ymin, xmax, ymax = bbox
+    dataset = ds.dataset(files, filesystem=fs.S3FileSystem(
+        anonymous=True, region="us-west-2"))
+    batches = dataset.to_batches(
+        filter=((pc.field("bbox", "xmin") < xmax)
+                & (pc.field("bbox", "xmax") > xmin)
+                & (pc.field("bbox", "ymin") < ymax)
+                & (pc.field("bbox", "ymax") > ymin)),
+        use_threads=True, batch_readahead=16, fragment_readahead=4)
+    return (b for b in batches if b.num_rows)
+
+
 def _overture_reader(overture_type: str, bbox: tuple):
     """Batches of one Overture type inside bbox. The STAC index narrows the
     read to the files that intersect, so cost tracks the bbox instead of the
@@ -137,15 +220,11 @@ def _overture_reader(overture_type: str, bbox: tuple):
     except ImportError:
         sys.exit("overturemaps required for non-cached fetches: "
                  "pip install overturemaps")
-    try:
-        reader = core.record_batch_reader(overture_type, bbox=bbox, stac=True)
-    except Exception as e:  # noqa: BLE001
-        print(f"    STAC lookup failed ({e}); scanning the full dataset")
-        reader = None
-    if reader is None:
-        # overturemaps also returns None when it fails to build a reader,
-        # so None can't be read as "no data" without a second attempt.
-        reader = core.record_batch_reader(overture_type, bbox=bbox)
+    release = core.get_latest_release()
+    index = _stac_index(release)
+    if index is not None:
+        return _files_reader(_stac_files(index, overture_type, bbox), bbox)
+    reader = core.record_batch_reader(overture_type, bbox=bbox, release=release)
     if reader is None:
         sys.exit(f"Overture {overture_type} reader unavailable for {bbox}")
     return reader
