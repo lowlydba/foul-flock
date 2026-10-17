@@ -536,9 +536,13 @@ def test_emit_artifacts(build_mod, sandbox):
                            brand=None, direction="90")
     cam_clear = make_cam(camera_id="cam-clear", osm_id=2, lat=48.5,
                          operator=None, brand=None, direction=None)
+    # ~250 m from the place: clear at the default radius, but a wider
+    # slider could flag it, so it must stay in the core file
+    cam_near = make_cam(camera_id="cam-near", osm_id=3, lat=47.0025,
+                        operator=None, brand=None, direction=None)
     place = place_at(build_mod, 47.0, -122.0, 80)
     matches = build_mod.run_matching(
-        [cam_flagged, cam_clear], {"school": [place]}, [rule],
+        [cam_flagged, cam_clear, cam_near], {"school": [place]}, [rule],
         default_buffer=100, scan_max=400)
 
     divisions = {
@@ -562,9 +566,11 @@ def test_emit_artifacts(build_mod, sandbox):
              "source_url": "https://example.org/or"},
         ],
     }
+    build_mod.OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (build_mod.OUT_DIR / "cameras_clear_ZZ.geojson").write_text("{}")
     meta = build_mod.emit(
-        [cam_flagged, cam_clear], {"school": [place]}, matches, [rule],
-        rules_doc, divisions, default_buffer=100, rule_states=["WA"],
+        [cam_flagged, cam_clear, cam_near], {"school": [place]}, matches,
+        [rule], rules_doc, divisions, default_buffer=100, rule_states=["WA"],
         scan_max=400)
 
     out = build_mod.OUT_DIR
@@ -573,10 +579,29 @@ def test_emit_artifacts(build_mod, sandbox):
              for f in cams["features"]}
     assert by_id["cam-flagged"]["status"] == "flagged"
     assert by_id["cam-flagged"]["match_count"] == 1
-    assert by_id["cam-clear"]["status"] == "checked_clear"
+    # candidates within the scan radius stay in the core file for the sliders
+    assert by_id["cam-near"]["status"] == "checked_clear"
+    assert json.loads(by_id["cam-near"]["matches"])
+    # a camera with no candidate anywhere can never be flagged: per-state shard
+    assert "cam-clear" not in by_id
+    shard = json.loads((out / "cameras_clear_WA.geojson").read_text(encoding="utf-8"))
+    clear = {f["properties"]["camera_id"]: f["properties"]
+             for f in shard["features"]}
+    assert clear["cam-clear"]["status"] == "checked_clear"
+    assert meta["clear_shards"] == {"WA": {"cameras": 1, "cones": 0}}
+    assert not (out / "view_cones_clear_WA.geojson").exists()
+    assert not (out / "cameras_clear_ZZ.geojson").exists(), "stale shard removed"
     # matches ride along as a JSON string for the web app
     assert isinstance(by_id["cam-flagged"]["matches"], str)
     assert json.loads(by_id["cam-flagged"]["matches"])[0]["place_id"] == "p-1"
+    # empty/false/null values are omitted; provenance fields are always kept
+    assert not {"matches", "match_count", "road_flag", "road_rule_id"} & set(
+        clear["cam-clear"])
+    assert None not in clear["cam-clear"].values()
+    for props in [*by_id.values(), *clear.values()]:
+        assert props["osm_url"].startswith("https://www.openstreetmap.org/node/")
+    # a match's camera_id just repeats the feature's own
+    assert "camera_id" not in json.loads(by_id["cam-flagged"]["matches"])[0]
 
     cones = json.loads((out / "view_cones.geojson").read_text(encoding="utf-8"))
     assert [f["properties"]["camera_id"] for f in cones["features"]] == ["cam-flagged"]
@@ -598,7 +623,7 @@ def test_emit_artifacts(build_mod, sandbox):
     assert rules_json["sliders"]["close_by"]["default"] == 100
     assert rules_json["sliders"]["on_premises"]["default"] == 50
     assert rules_json["flagged_count"] == 1
-    assert rules_json["camera_count"] == 2
+    assert rules_json["camera_count"] == 3
     assert meta["flagged_count"] == 1
 
     # data license notice ships with the artifacts
@@ -765,9 +790,16 @@ def test_emit_guideline_status_and_poi(build_mod, sandbox):
     out = build_mod.OUT_DIR
     cams = {f["properties"]["camera_id"]: f["properties"] for f in json.loads(
         (out / "cameras.geojson").read_text(encoding="utf-8"))["features"]}
+    shard = {f["properties"]["camera_id"]: f["properties"] for f in json.loads(
+        (out / "cameras_clear_TX.geojson").read_text(encoding="utf-8"))["features"]}
     assert cams["tx-new"]["status"] == "guideline"
-    assert cams["tx-old"]["status"] == "checked_clear"   # grandfathered
-    assert cams["tx-old"]["road_ref"] == "TX 71"
+    assert "tx-old" not in cams
+    assert shard["tx-old"]["status"] == "checked_clear"   # grandfathered
+    assert shard["tx-old"]["road_ref"] == "TX 71"
+    # road lookups seed from shards too, or clear cameras would be re-queried
+    prev = build_mod.load_previous_cameras()
+    assert prev["tx-old"]["props"]["road_ref"] == "TX 71"
+    assert set(prev) == {"tx-new", "tx-old", "ct-1"}
     assert cams["ct-1"]["status"] == "guideline"
     assert meta["flagged_count"] == 0 and meta["guideline_count"] == 2
     assert meta["guideline_states"] == ["CT", "TX"]

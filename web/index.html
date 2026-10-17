@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,   initial-scale=1, viewport-fit=cover" />
   <title>Foul Flock · ALPR Siting Compliance Map</title>
   <meta name="description" content="Cross-references crowdsourced ALPR camera locations against state camera-siting statutes. A screening tool, not legal advice." />
   <meta name="color-scheme" content="light dark" />
@@ -34,17 +34,40 @@
   <header id="topbar">
     <h1>Foul Flock<span class="ff-sub">checks license-plate cameras against state placement laws</span></h1>
       <span id="stats">loading…</span>
-      <a id="faq-link" href="faq.html">How &amp; why</a>
-      <button id="about-btn" title="About &amp; disclaimers">About</button>
+      <button id="legend-toggle" type="button" aria-controls="legend" aria-expanded="false">Legend</button>
+      <button id="about-btn" type="button" title="About, how it works &amp; disclaimers">About</button>
   </header>
 
-  <aside id="legend">
+  <div id="layers">
+    <button id="layers-btn" type="button" aria-expanded="false" aria-controls="layers-panel">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <path d="M12 3 3 8l9 5 9-5-9-5Z" /><path d="m3 12 9 5 9-5" /><path d="m3 16 9 5 9-5" />
+      </svg>
+      Layers
+    </button>
+    <div id="layers-panel" hidden>
+      <div id="layers-title" class="legend-title">Map layers</div>
+      <label class="switch-row" for="clear-toggle">
+        <span>
+          <span class="switch-label">Cameras with nothing found</span>
+          <small id="clear-help">No protected place nearby. Hidden by default.</small>
+        </span>
+        <input type="checkbox" role="switch" id="clear-toggle" autocomplete="off"
+               aria-describedby="clear-help" disabled />
+      </label>
+      <p id="clear-status" class="fine" role="status"></p>
+    </div>
+  </div>
+
+  <aside id="legend" aria-label="Map legend">
+      <button id="legend-close" type="button" aria-label="Close legend">&times;</button>
       <div class="legend-title">Legend</div>
       <div class="legend-group">
         <div class="legend-sub">Cameras</div>
         <div class="row"><span class="dot flagged"></span> Flagged <em>· verify before acting</em></div>
         <div class="row"><span class="dot guideline"></span> Spirit-of guideline <em>· not a statute</em></div>
-        <div class="row"><span class="dot clear"></span> Nothing found</div>
+        <div class="row"><span class="dot clear"></span> Nothing found <em>· optional layer</em></div>
         <div class="row"><span class="dot excluded"></span> Possibly exempt device</div>
       </div>
       <div class="legend-group">
@@ -79,23 +102,45 @@
   </aside>
 
   <!-- Camera detail / report panel -->
-  <aside id="detail" class="hidden">
-    <button id="detail-close" aria-label="Close">&times;</button>
+  <aside id="detail" class="hidden" aria-label="Camera details">
+    <button id="detail-close" type="button" aria-label="Close">&times;</button>
     <div id="detail-body"></div>
   </aside>
 
   <!-- About / disclaimers modal -->
   <div id="about" class="modal hidden">
-    <div class="modal-card">
-      <button class="modal-close" aria-label="Close">&times;</button>
-      <h2>About this tool</h2>
-      <p class="fine">New here? The <a href="faq.html">How &amp; why page</a> explains
-      everything in plain English.</p>
-      <p>Foul Flock cross-references crowdsourced ALPR camera locations
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="about-title">
+      <button class="modal-close" type="button" aria-label="Close">&times;</button>
+      <div class="modal-body">
+      <h2 id="about-title">About &amp; how it works</h2>
+
+      <h3>What is this?</h3>
+      <p>Automated license plate readers (ALPRs) photograph every passing car
+      and log where it was. A few states have passed laws about <em>where</em>
+      these cameras may be placed, such as near schools or places of worship.
+      Foul Flock cross-references crowdsourced camera locations
       (OpenStreetMap / <a href="https://deflock.me" target="_blank" rel="noopener">DeFlock</a> tagging)
-      against a hand-curated table of state camera-siting statutes, and flags
-      cameras within a screened distance of a protected place: schools,
+      against a hand-curated table of those placement (siting) statutes, and
+      flags cameras within a screened distance of a protected place: schools,
       places of worship, healthcare facilities, courts, food banks.</p>
+
+      <h3>Why does it exist?</h3>
+      <p>Placement laws only matter if someone checks. Agencies rarely audit
+      their own cameras against siting statutes, and doing it by hand means
+      reading statutes and measuring distances one camera at a time. This tool
+      does the tedious part, leaving verification and follow-up to you.</p>
+
+      <h3>How do I use it?</h3>
+      <ol>
+        <li>Purple states have a placement law. Zoom into one.</li>
+        <li>Red dots are cameras flagged as close to a protected place. Blue
+            dots were checked and nothing was found; they are hidden until you
+            turn on "Cameras with nothing found" under Layers, then appear once
+            you zoom in to roughly state level. Orange icons are the protected
+            places themselves.</li>
+        <li>Tap or click a red dot to see the distance, the statute, and what
+            the law actually says.</li>
+      </ol>
 
       <h3>⚠️ Read before acting on anything here</h3>
       <ul>
@@ -123,11 +168,53 @@
             relocation request), then replace its contents with facts you've
             verified yourself.</li>
       </ol>
+
+      <h3>What do the radius sliders do?</h3>
+      <p>Some statutes say things like "immediately surrounding" without giving
+      a number. Rather than guess what a court would say, the map uses an
+      adjustable "close by" radius (default 100 m) and labels every result that
+      relies on it. Where a statute uses on-property language instead, like
+      Virginia's "on or within the boundaries of", a tighter "on premises"
+      radius applies (default 50 m). Both sliders live in the legend. Neither
+      is a legal threshold, and statutes that state an actual number ignore
+      them.</p>
+
+      <h3>What do the state colors mean?</h3>
+      <p>Purple states have a siting law. Amber states have no siting statute,
+      but something close to one that the map shows on a best-effort basis:
+      Florida and Texas have pulled ALPR cameras (or new permits) from state
+      highways by executive action, and Connecticut has a provision about
+      cameras near certain clinics and immigrant-services nonprofits whose
+      distance isn't set yet. Amber is a "spirit of" signal, never a legal
+      finding. Gray states were reviewed and have no siting-specific ALPR law
+      (many regulate only data retention or use). A state with no shading has
+      not been reviewed. Hover over a state to see when it was last
+      checked.</p>
+
+      <h3>Where does the data come from?</h3>
+      <p>Camera locations come from
+      <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a>
+      using the DeFlock convention (<code>surveillance:type=ALPR</code>).
+      Protected places and state boundaries come from
+      <a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps</a>.
+      The law table is hand-curated, with citations and source links on every
+      rule.</p>
+
+      <h3>Something looks wrong. How do I fix it?</h3>
+      <p>Cameras: every camera's detail panel links to its OpenStreetMap node.
+      Correct the tags there and the next data build picks it up. Places come
+      from Overture Maps, which blends several sources, so report a wrong place
+      as an issue on
+      <a href="https://github.com/lowlydba/foul-flock" target="_blank" rel="noopener">GitHub</a>.
+      If a <em>law</em> is wrong or missing, open an issue too, with a link to
+      the statute.</p>
+
       <p class="fine">Static site; no tracking, no backend. Camera data &copy; OpenStreetMap
       contributors (ODbL). Protected places and state boundaries &copy;
       <a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps Foundation</a>
       (places: CDLA-Permissive-2.0; divisions contain OSM data, ODbL). Made by
       <a href="https://github.com/lowlydba" target="_blank" rel="noopener">lowlydba</a>.</p>
+      </div>
     </div>
   </div>
 

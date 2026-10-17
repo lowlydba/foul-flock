@@ -111,7 +111,6 @@ body { padding: 0; }
   margin-left: 10px; letter-spacing: 0; }
 #stats { font-size: 12px; color: var(--muted); flex: 1;
   font-family: var(--font-data); }
-#faq-link { font-size: 13px; white-space: nowrap; }
 #about-btn {
   width: auto; margin: 0; padding: 4px 12px; font-size: 13px;
   background: var(--card); color: var(--accent-text);
@@ -159,6 +158,39 @@ body { padding: 0; }
 .swatch.guideline { background: var(--guideline); }
 .swatch.nolaw { background: var(--nolaw); }
 .icon-chip { width: 14px; height: 14px; flex: 0 0 auto; border-radius: 4px; }
+
+/* ---------------------------- layers control --------------------------- */
+
+#layers {
+  position: absolute; z-index: 5;
+  top: calc(var(--topbar-h, 56px) + 10px);
+  left: max(12px, env(safe-area-inset-left));
+}
+#layers-btn {
+  display: inline-flex; align-items: center; gap: 6px; width: auto;
+  margin: 0; padding: 6px 12px; font-size: 13px; min-height: 36px;
+  background: var(--card); color: var(--accent-text);
+  border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 2px 10px var(--shadow);
+}
+#layers-btn:hover, #layers-btn[aria-expanded="true"] {
+  border-color: var(--accent-text); }
+#layers-panel {
+  margin-top: 6px; width: min(300px, calc(100vw - 24px));
+  background: var(--bg); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 2px 10px var(--shadow); padding: 10px 14px 12px;
+  font-size: 13px; line-height: 1.4;
+}
+#layers-panel[hidden] { display: none; }
+#layers-panel { display: block; }
+.switch-row { display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 14px; margin: 6px 0 0; }
+.switch-row input[role="switch"] { flex: 0 0 auto; margin: 2px 0 0; }
+.switch-label { display: block; font-weight: 600; }
+.switch-row small { display: block; color: var(--muted); font-size: 12px;
+  margin-top: 2px; }
+#clear-status { margin: 8px 0 0; min-height: 1.4em; }
 
 .legend-sub { font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
   color: var(--muted); font-weight: 600; margin: 9px 0 1px; }
@@ -265,16 +297,23 @@ body { padding: 0; }
 
 .modal { position: fixed; inset: 0; z-index: 20; background: rgba(10,14,18,.55);
   display: flex; align-items: center; justify-content: center; padding: 20px; }
+/* The card clips; only .modal-body scrolls, so the close button stays put. */
 .modal-card { position: relative; background: var(--card); border-radius: 12px;
   border: 1px solid var(--border);
-  max-width: 640px; max-height: 85vh; overflow-y: auto; padding: 24px 28px;
+  display: flex; flex-direction: column;
+  max-width: 640px; max-height: 85vh; max-height: 85dvh; overflow: hidden;
   font-size: 13.5px; color: var(--ink); line-height: 1.55; }
+.modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  overscroll-behavior: contain; padding: 24px 28px; }
 .modal-card h2 { margin-top: 0; font-size: 19px; font-weight: 650;
-  letter-spacing: -.01em; color: var(--ink); }
-.modal-card h3 { font-size: 14px; font-weight: 650; color: var(--ink); }
-.modal-close { position: absolute; top: 10px; right: 14px; width: auto;
-  margin: 0; padding: 0 4px; border: none; background: none;
-  font-size: 24px; color: var(--muted); }
+  letter-spacing: -.01em; color: var(--ink); margin-right: 40px; }
+.modal-card h3 { font-size: 14px; font-weight: 650; color: var(--ink);
+  margin: 1.4em 0 .4em; }
+.modal-card h2 + h3 { margin-top: .6em; }
+.modal-close { position: absolute; top: 10px; right: 14px; z-index: 1;
+  width: auto; margin: 0; padding: 0 8px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--card);
+  font-size: 24px; line-height: 1.2; color: var(--muted); }
 .fine { color: var(--muted); font-size: 12px; }
 .pop-fine { color: #59636e; font-size: 11.5px; }
 .pop-list { margin: 4px 0; padding-left: 16px; font-size: 11.5px; }
@@ -316,11 +355,150 @@ body { padding: 0; }
 }
 .state-tip .maplibregl-popup-content { padding: 6px 10px; }
 
-/* ------------------------- FAQ page (Pico-led) ------------------------- */
+/* ------------------------ responsive modes ------------------------------
+   Three layouts, keyed to viewport width (keep in sync with MODES in
+   app.js): desktop > 1024px (rules above), tablet 641-1024px, phone
+   <= 640px. In tablet/phone the legend collapses behind a topbar button
+   and the detail panel becomes a side drawer (tablet) or bottom sheet
+   (phone). Touch sizing keys off pointer type as well, so a touch laptop
+   gets large targets without losing its desktop layout. */
 
-body.page { height: auto; }
-.page .backlink { display: inline-block; margin-bottom: 18px;
-  text-decoration: none; border-bottom: 1px dotted var(--accent-text); }
-.page .tagline { color: var(--muted); margin-top: -.5rem; }
-.page footer { margin-top: 48px; color: var(--muted); font-size: .85em;
-  border-top: 1px solid var(--border); padding-top: 14px; }
+#topbar { padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right)); }
+#legend-toggle, #legend-close { display: none; }
+#legend-toggle { width: auto; margin: 0; padding: 4px 12px; font-size: 13px;
+  background: var(--card); color: var(--accent-text);
+  border: 1px solid var(--border); border-radius: 6px; }
+#legend-toggle:hover, #legend-toggle[aria-expanded="true"] {
+  border-color: var(--accent-text); }
+#legend-close { position: absolute; top: 4px; right: 6px; width: auto;
+  margin: 0; padding: 0 8px; border: none; background: none;
+  font-size: 24px; line-height: 1; color: var(--muted); }
+button, a, summary, input[type="range"] { touch-action: manipulation; }
+
+/* Touch targets: 44 x 44 CSS px (WCAG 2.5.5), and readable form text. */
+@media (pointer: coarse), (max-width: 1024px) {
+  #layers-btn { min-height: 44px; font-size: 14px; }
+  #layers-panel { font-size: 14px; }
+  .switch-row { min-height: 44px; }
+  .switch-row small { font-size: 13px; }
+  .switch-row input[role="switch"] { margin-top: 0; }
+  #about-btn, #legend-toggle, #detail-close, .modal-close, #legend-close,
+  .report-btn, .report-actions button {
+    min-height: 44px; min-width: 44px;
+  }
+  #detail-close, .modal-close, #legend-close {
+    display: inline-grid; place-items: center;
+  }
+  #method-notes summary, .disclaimer summary { padding: 10px 0; }
+  .buffer-row input[type="range"] { min-height: 32px; }
+  .buffer-row input[type="range"]::-webkit-slider-thumb {
+    width: 26px; height: 26px; margin-top: -9px; }
+  .buffer-row input[type="range"]::-moz-range-thumb {
+    width: 26px; height: 26px; }
+  .report-box textarea { font-size: 16px; }
+  .maplibregl-ctrl-group button { width: 44px; height: 44px; }
+  .maplibregl-popup-close-button { width: 44px; height: 44px; top: 0; right: 0; }
+  .maplibregl-popup-content:has(> .maplibregl-popup-close-button) {
+    padding-right: 48px; }
+}
+
+/* ---- Tablet: 641-1024px ---- */
+@media (min-width: 641px) and (max-width: 1024px) {
+  #topbar { align-items: center; gap: 12px; }
+  #topbar h1 .ff-sub { display: none; }
+  #legend-toggle { display: inline-grid; place-items: center; }
+  #legend {
+    bottom: max(34px, env(safe-area-inset-bottom));
+    left: max(12px, env(safe-area-inset-left));
+    width: min(340px, calc(100vw - 24px)); max-width: none;
+    max-height: calc(100dvh - var(--topbar-h, 56px) - 56px);
+    overflow-y: auto; font-size: 14px; padding: 14px 16px; z-index: 7;
+  }
+  #legend:not(.is-open) { display: none; }
+  #legend-close { display: inline-grid; }
+  #legend .legend-title { font-size: 12px; }
+  #legend .legend-sub { font-size: 11.5px; }
+  #legend em { font-size: 12.5px; }
+  #legend .row { margin: 6px 0; }
+  .buffer-row label { font-size: 13px; width: 96px; }
+  .buffer-row output { font-size: 13px; }
+  #method-notes summary { font-size: 13px; }
+  #buffer-note { font-size: 13px; max-width: none; max-height: none; }
+  #buffer-note dt { font-size: 12px; }
+  #detail {
+    top: calc(var(--topbar-h, 56px) + 8px);
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(24px, env(safe-area-inset-bottom));
+    width: min(400px, 48vw); font-size: 15px;
+  }
+  .modal-card { font-size: 15px; }
+}
+
+/* ---- Phone: <= 640px ---- */
+@media (max-width: 640px) {
+  #topbar { flex-wrap: wrap; align-items: center; gap: 2px 8px;
+    padding-top: 6px; padding-bottom: 4px; }
+  #topbar h1 { order: 1; flex: 1 1 auto; font-size: 17px; }
+  #topbar h1 .ff-sub { display: none; }
+  #legend-toggle { order: 2; display: inline-grid; place-items: center; }
+  #about-btn { order: 3; }
+  #topbar::after { content: ""; order: 4; flex: 0 0 100%; height: 0; }
+  #stats { order: 5; flex: 1 1 100%; min-width: 0; font-size: 12px; }
+
+  #legend, #detail {
+    left: 0; right: 0; width: auto; max-width: none;
+    border-radius: 14px 14px 0 0; border-width: 1px 0 0;
+    box-shadow: 0 -4px 18px var(--shadow);
+    max-height: 62dvh; overflow-y: auto;
+  }
+  #legend {
+    bottom: 0; z-index: 7; font-size: 15px;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  #legend:not(.is-open) { display: none; }
+  #legend-close { display: inline-grid; }
+  #legend .legend-title { font-size: 12.5px; }
+  #legend .legend-sub { font-size: 12px; }
+  #legend .row { white-space: normal; margin: 7px 0; }
+  #legend em { font-size: 13px; }
+  .buffer-row label { font-size: 14px; width: 104px; }
+  .buffer-row output { font-size: 14px; }
+  #method-notes summary { font-size: 14px; }
+  #buffer-note { font-size: 14px; max-width: none; max-height: none; }
+  #buffer-note dt { font-size: 12.5px; }
+
+  #detail {
+    top: auto; bottom: 0; font-size: 15.5px;
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    overscroll-behavior: contain;
+  }
+  #detail.hidden { display: none; }
+  #detail h2 { font-size: 18px; margin-right: 52px; }
+  #detail h3 { font-size: 12.5px; }
+  #detail-close { top: 6px; right: 8px; }
+  .kv, .statute-quote, .guideline-banner, .disclaimer { font-size: 14px; }
+  .disclaimer summary { font-size: 13px; }
+  .match-card .cite { font-size: 13px; }
+  .report-btn { font-size: 15px; }
+  .report-actions { flex-wrap: wrap; }
+  .report-actions button { font-size: 14px; flex: 1 1 140px; }
+
+  .modal { padding: 8px; align-items: stretch; }
+  .modal-card { max-height: none; width: 100%; font-size: 15px; }
+  .modal-body { padding: 18px 16px;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right)); }
+  .modal-close { top: 4px; right: 6px; }
+  .modal-card h2 { margin-right: 52px; }
+}
+
+/* Short landscape phones: keep panels inside the viewport. */
+@media (max-height: 500px) and (min-width: 641px) {
+  #legend { max-height: calc(100dvh - var(--topbar-h, 48px) - 24px);
+    bottom: 12px; }
+}

@@ -20,12 +20,35 @@ const CATEGORY_LABELS = {
   immigrant_services: "immigrant services provider",
 };
 
-const CAM_LAYERS = ["cams-flagged", "cams-guideline", "cams-clear", "cams-excluded"];
+const CAM_LAYERS = ["cams-flagged", "cams-guideline", "cams-clear", "cams-clear-far", "cams-excluded"];
 
 let META = null; // rules.json content
 let RULES_BY_ID = {};
 let CAMS = null;   // cameras.geojson, mutated when the radius sliders move
-let CONES = null;  // view_cones.geojson, kept in sync with camera status
+// view_cones.geojson is ~40% of the data payload and invisible below
+// CONE_MIN_ZOOM, so it loads on demand (CONE_LOAD_ZOOM leaves time to fetch).
+const CONE_MIN_ZOOM = 13;
+const CONE_LOAD_ZOOM = 12;
+// "Nothing found" cameras are ~90% of all points and hidden until the
+// legend toggle is on. Those with a candidate place nearby ship in the core
+// file (a wider slider radius could flag them); the rest are per-state
+// shards fetched only for the states in view.
+const CLEAR_MIN_ZOOM = 6;
+const CLEAR_CAMERAS_PREFIX = "cameras_clear_";
+const CLEAR_CONES_PREFIX = "view_cones_clear_";
+const CLEAR_HIDDEN_CONES = ["!=", ["get", "status"], "checked_clear"];
+let CLEAR_ON = false;
+let CLEAR_SHARDS = {}; // state code -> {cameras, cones} counts from rules.json
+const CLEAR_CAMS = { type: "FeatureCollection", features: [] };
+const CLEAR_CONES = { type: "FeatureCollection", features: [] };
+const SHARD_LOADS = {}; // url -> in-flight or settled fetch
+const STATE_BOUNDS = {}; // state code -> LngLatBounds
+const SLIDER_DEBOUNCE_MS = 120;
+let CONES = { type: "FeatureCollection", features: [] }; // synced to camera status
+let CONES_LOADED = false;
+let CONES_LOADING = false;
+let CONES_STALE = false; // statuses changed while cones were out of range
+let CAM_STATUS = {}; // camera_id -> current status
 let ALL_MATCHES = {}; // camera_id -> all candidate matches (unfiltered)
 let CLOSE_M = 100;  // "close by" heuristic radius (statute gives no number)
 let ONPREM_M = 50;  // "on premises" heuristic radius (on-property language)
@@ -127,10 +150,7 @@ map.on("load", async () => {
   // refresh lands; fail with a visible message instead of a broken map.
   try {
     META = await fetchJSON("data/rules.json");
-    [CAMS, CONES] = await Promise.all([
-      fetchJSON("data/cameras.geojson"),
-      fetchJSON("data/view_cones.geojson"),
-    ]);
+    CAMS = await fetchJSON("data/cameras.geojson");
   } catch (err) {
     console.error("Map data failed to load:", err);
     document.getElementById("stats").textContent =
@@ -150,10 +170,12 @@ map.on("load", async () => {
   CLOSE_M = SLIDERS.close_by.default;
   ONPREM_M = SLIDERS.on_premises.default;
 
-  // Cameras and cones live in memory so the radius slider can restyle
-  // them without a rebuild.
+  // Cameras live in memory so the radius sliders can restyle them without
+  // a rebuild. Cameras with no candidate matches omit the property.
   for (const f of CAMS.features) {
-    ALL_MATCHES[f.properties.camera_id] = JSON.parse(f.properties.matches || "[]");
+    if (f.properties.matches) {
+      ALL_MATCHES[f.properties.camera_id] = JSON.parse(f.properties.matches);
+    }
   }
 
   await Promise.all(
@@ -175,9 +197,12 @@ map.on("load", async () => {
     document.getElementById(outId).textContent = `${cfg.default} m`;
     el.addEventListener("input", () => {
       document.getElementById(outId).textContent = `${el.value} m`;
-      onChange(Number(el.value));
+      // Re-tiling every camera is costly; wait for the drag to settle.
+      clearTimeout(sliderTimers[id]);
+      sliderTimers[id] = setTimeout(() => onChange(Number(el.value)), SLIDER_DEBOUNCE_MS);
     });
   };
+  const sliderTimers = {};
   wireSlider("buffer-slider", "buffer-value", SLIDERS.close_by,
     (v) => applyBuffer(v, ONPREM_M));
   wireSlider("onprem-slider", "onprem-value", SLIDERS.on_premises,
@@ -198,12 +223,17 @@ map.on("load", async () => {
     `(DeFlock convention). Built ${META.generated_at.slice(0, 10)}.</dd>` +
     `</dl>`;
 
+  // Status is settled before the sources are created so the map tiles the
+  // cameras once, not twice.
+  applyBuffer(CLOSE_M, ONPREM_M);
+
   map.addSource("states", { type: "geojson", data: "data/states.geojson" });
   map.addSource("cameras", { type: "geojson", data: CAMS });
   map.addSource("places", { type: "geojson", data: "data/places.geojson" });
   map.addSource("cones", { type: "geojson", data: CONES });
-
-  applyBuffer(CLOSE_M, ONPREM_M);
+  map.addSource("clear-cams", { type: "geojson", data: CLEAR_CAMS });
+  map.addSource("clear-cones", { type: "geojson", data: CLEAR_CONES });
+  map.on("moveend", () => { syncCones(); syncClear(); });
 
   map.addLayer({
     id: "state-fill",
@@ -272,21 +302,32 @@ map.on("load", async () => {
     },
   });
 
+  const CONE_PAINT = {
+    "fill-color": [
+      "match", ["get", "status"],
+      "flagged", COLORS.flagged,
+      "guideline", COLORS.guideline,
+      COLORS.clear,
+    ],
+    "fill-opacity": 0.18,
+    "fill-outline-color": "#555",
+  };
+  // "Nothing found" cameras are hidden until the legend toggle is on.
   map.addLayer({
     id: "view-cones",
     type: "fill",
     source: "cones",
-    minzoom: 13,
-    paint: {
-      "fill-color": [
-        "match", ["get", "status"],
-        "flagged", COLORS.flagged,
-        "guideline", COLORS.guideline,
-        COLORS.clear,
-      ],
-      "fill-opacity": 0.18,
-      "fill-outline-color": "#555",
-    },
+    minzoom: CONE_MIN_ZOOM,
+    filter: CLEAR_HIDDEN_CONES,
+    paint: CONE_PAINT,
+  });
+  map.addLayer({
+    id: "view-cones-clear",
+    type: "fill",
+    source: "clear-cones",
+    minzoom: CONE_MIN_ZOOM,
+    layout: { visibility: "none" },
+    paint: CONE_PAINT,
   });
 
   map.addLayer({
@@ -302,18 +343,31 @@ map.on("load", async () => {
       "circle-stroke-color": "#4d3a12",
     },
   });
+  const CLEAR_DOT_PAINT = {
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 2.2, 12, 5],
+    "circle-color": COLORS.clear,
+    "circle-opacity": 0.75,
+    "circle-stroke-width": 0.5,
+    "circle-stroke-color": "#123a63",
+  };
+  // Candidates that a wider radius could flag (loaded with the core file).
   map.addLayer({
     id: "cams-clear",
     type: "circle",
     source: "cameras",
+    minzoom: CLEAR_MIN_ZOOM,
+    layout: { visibility: "none" },
     filter: ["==", ["get", "status"], "checked_clear"],
-    paint: {
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 2.2, 12, 5],
-      "circle-color": COLORS.clear,
-      "circle-opacity": 0.75,
-      "circle-stroke-width": 0.5,
-      "circle-stroke-color": "#123a63",
-    },
+    paint: CLEAR_DOT_PAINT,
+  });
+  // Cameras with no candidate place nearby, fetched per state on demand.
+  map.addLayer({
+    id: "cams-clear-far",
+    type: "circle",
+    source: "clear-cams",
+    minzoom: CLEAR_MIN_ZOOM,
+    layout: { visibility: "none" },
+    paint: CLEAR_DOT_PAINT,
   });
   map.addLayer({
     id: "cams-guideline",
@@ -343,10 +397,19 @@ map.on("load", async () => {
   });
 
   for (const layer of CAM_LAYERS) {
-    map.on("click", layer, (e) => openDetail(e.features[0]));
+    // Touch input is handled by the tolerant tap handler below.
+    map.on("click", layer, (e) => { if (!isTouch()) openDetail(e.features[0]); });
     map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
     map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
   }
+
+  // Camera dots are a few px wide; fingers are not. On touch, open the
+  // nearest camera within a fingertip-sized radius of the tap.
+  map.on("click", (e) => {
+    if (!isTouch()) return;
+    const hit = cameraNear(e.point);
+    if (hit) openDetail(hit);
+  });
 
   // Hover tooltip while browsing nationally: state name + review status +
   // when the law entry was last checked.
@@ -389,20 +452,14 @@ map.on("load", async () => {
     // zoomed in so empty clicks aren't spammy.
     if (map.getZoom() > 6.5) return;
     // Only when no camera was clicked on top
-    const cams = map.queryRenderedFeatures(e.point, {
-      layers: CAM_LAYERS,
-    });
-    if (cams.length) return;
+    if (cameraNear(e.point)) return;
     const p = e.features[0].properties;
     const html = stateStatusHtml(p);
     new maplibregl.Popup().setLngLat(e.lngLat).setHTML(html).addTo(map);
   });
 
   map.on("click", "places-pts", (e) => {
-    const cams = map.queryRenderedFeatures(e.point, {
-      layers: CAM_LAYERS,
-    });
-    if (cams.length) return;
+    if (cameraNear(e.point)) return;
     const p = e.features[0].properties;
     const cat = CATEGORY_LABELS[p.category] || p.category;
     const rel = p.religion && p.religion !== "null" ? ` (${p.religion})` : "";
@@ -415,18 +472,102 @@ map.on("load", async () => {
   // Zoom to rule states
   try {
     const states = await fetchJSON("data/states.geojson");
+    for (const f of states.features) {
+      const b = new maplibregl.LngLatBounds();
+      extendBounds(b, f.geometry);
+      STATE_BOUNDS[f.properties.state_code] = b;
+    }
     const ruleFeats = states.features.filter(
       (f) => f.properties.law_status === "siting_law"
     );
     if (ruleFeats.length) {
       const b = new maplibregl.LngLatBounds();
       for (const f of ruleFeats) extendBounds(b, f.geometry);
-      map.fitBounds(b, { padding: 60 });
+      map.fitBounds(b, { padding: isCompact()
+        ? { top: topbarHeight() + 24, bottom: 24, left: 24, right: 24 }
+        : 60 });
     }
   } catch (err) {
     console.error("States overlay failed to load:", err);
   }
+
+  // Enabled only now: shard selection needs the state bounds above.
+  CLEAR_SHARDS = META.clear_shards || {};
+  const clearToggle = document.getElementById("clear-toggle");
+  clearToggle.checked = false;
+  clearToggle.disabled = false;
+  clearToggle.addEventListener("change", () => setClearVisible(clearToggle.checked));
 });
+
+/* --------------------- "Nothing found" toggle + shards ----------------- */
+
+function setClearVisible(on) {
+  CLEAR_ON = on;
+  const visibility = on ? "visible" : "none";
+  for (const id of ["cams-clear", "cams-clear-far", "view-cones-clear"]) {
+    map.setLayoutProperty(id, "visibility", visibility);
+  }
+  map.setFilter("view-cones", on ? null : CLEAR_HIDDEN_CONES);
+  if (on) syncClear();
+  else setClearStatus("");
+}
+
+function setClearStatus(text) {
+  const el = document.getElementById("clear-status");
+  // Skip no-op writes so the live region doesn't re-announce on every pan.
+  if (el.textContent !== text) el.textContent = text;
+}
+
+function boundsOverlap(a, b) {
+  return a.getWest() <= b.getEast() && a.getEast() >= b.getWest() &&
+    a.getSouth() <= b.getNorth() && a.getNorth() >= b.getSouth();
+}
+
+const shardUrl = (prefix, state) => `data/${prefix}${state}.geojson`;
+
+function loadShard(prefix, state, sourceId, collection) {
+  const url = shardUrl(prefix, state);
+  SHARD_LOADS[url] ??= fetchJSON(url).then((gj) => {
+    for (const f of gj.features) collection.features.push(f);
+    map.getSource(sourceId).setData(collection);
+  }).catch((err) => {
+    delete SHARD_LOADS[url]; // let the next pan or toggle retry
+    throw err;
+  });
+  return SHARD_LOADS[url];
+}
+
+// Fetch shards for the states in view (cones only once they could draw).
+async function syncClear() {
+  if (!CLEAR_ON) return;
+  const zoom = map.getZoom();
+  if (zoom < CLEAR_MIN_ZOOM) {
+    setClearStatus("Zoom in to a state to see them.");
+    return;
+  }
+  const view = map.getBounds();
+  const wanted = [];
+  for (const [state, counts] of Object.entries(CLEAR_SHARDS)) {
+    const bounds = STATE_BOUNDS[state];
+    if (bounds && !boundsOverlap(bounds, view)) continue;
+    if (counts.cameras) {
+      wanted.push([CLEAR_CAMERAS_PREFIX, state, "clear-cams", CLEAR_CAMS]);
+    }
+    if (counts.cones && zoom >= CONE_LOAD_ZOOM) {
+      wanted.push([CLEAR_CONES_PREFIX, state, "clear-cones", CLEAR_CONES]);
+    }
+  }
+  if (wanted.some(([prefix, state]) => !SHARD_LOADS[shardUrl(prefix, state)])) {
+    setClearStatus("Loading…");
+  }
+  try {
+    await Promise.all(wanted.map((args) => loadShard(...args)));
+    if (CLEAR_ON) setClearStatus("Showing cameras for the states in view.");
+  } catch (err) {
+    console.error("Clear shards failed to load:", err);
+    if (CLEAR_ON) setClearStatus("Some data failed to load. Pan the map to retry.");
+  }
+}
 
 function extendBounds(b, geom) {
   const walk = (c) =>
@@ -460,19 +601,49 @@ function applyBuffer(closeM, onpremM) {
       p.status = statutory.length ? "flagged"
         : (within.length || p.road_flag) ? "guideline"
         : "checked_clear";
-      p.match_count = within.length;
-      p.matches = JSON.stringify(within);
+      // Absent properties keep the per-tile payload small for the ~90% of
+      // cameras with nothing in range.
+      if (within.length) {
+        p.match_count = within.length;
+        p.matches = JSON.stringify(within);
+      } else {
+        delete p.match_count;
+        delete p.matches;
+      }
     }
     statusById[p.camera_id] = p.status;
   }
-  for (const f of CONES.features) {
-    f.properties.status = statusById[f.properties.camera_id] || f.properties.status;
-  }
+  CAM_STATUS = statusById;
+  CONES_STALE = true;
   const camSrc = map.getSource("cameras");
-  const coneSrc = map.getSource("cones");
   if (camSrc) camSrc.setData(CAMS);
-  if (coneSrc) coneSrc.setData(CONES);
+  syncCones();
   updateStats();
+}
+
+// Cones follow camera status. They load on first approach to CONE_MIN_ZOOM
+// and are only re-pushed to the map while in range.
+async function syncCones() {
+  if (!map.getSource("cones") || map.getZoom() < CONE_LOAD_ZOOM) return;
+  if (!CONES_LOADED) {
+    if (CONES_LOADING) return;
+    CONES_LOADING = true;
+    try {
+      CONES = await fetchJSON("data/view_cones.geojson");
+      CONES_LOADED = true;
+    } catch (err) {
+      console.error("View cones failed to load:", err);
+      return;
+    } finally {
+      CONES_LOADING = false;
+    }
+  }
+  if (!CONES_STALE) return;
+  for (const f of CONES.features) {
+    f.properties.status = CAM_STATUS[f.properties.camera_id] || f.properties.status;
+  }
+  map.getSource("cones").setData(CONES);
+  CONES_STALE = false;
 }
 
 function updateStats() {
@@ -548,7 +719,7 @@ function openDetail(feature) {
   const el = document.getElementById("detail-body");
 
   let html = `
-    <h2>ALPR camera</h2>
+    <h2 id="detail-title" tabindex="-1">ALPR camera</h2>
     <span class="status-badge ${p.status}">
       ${p.status === "flagged" ? "⚑ Flagged for review"
         : p.status === "guideline" ? "◐ Spirit-of guideline (not a statute)"
@@ -627,7 +798,7 @@ function openDetail(feature) {
   }
 
   el.innerHTML = html;
-  document.getElementById("detail").classList.remove("hidden");
+  showDetail(coords);
 
   const btn = document.getElementById("draft-report");
   if (btn) {
@@ -787,6 +958,126 @@ function draftReport(p, coords, matches) {
   return lines.join("\n");
 }
 
+/* ------------------------- responsive modes --------------------------- */
+
+// Keep in sync with the "responsive modes" media queries in style.css.
+const MODES = {
+  phone: window.matchMedia("(max-width: 640px)"),
+  tablet: window.matchMedia("(min-width: 641px) and (max-width: 1024px)"),
+  touch: window.matchMedia("(pointer: coarse)"),
+  reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)"),
+};
+const TAP_TOLERANCE_PX = 22;
+
+function isPhone() { return MODES.phone.matches; }
+function isCompact() { return MODES.phone.matches || MODES.tablet.matches; }
+function isTouch() { return MODES.touch.matches; }
+function topbarHeight() { return document.getElementById("topbar").offsetHeight; }
+
+// Panels and the map's visible area are offset by the live topbar height,
+// which changes when the phone layout wraps it onto two rows.
+const topbarObserver = new ResizeObserver(() =>
+  document.documentElement.style.setProperty("--topbar-h", `${topbarHeight()}px`)
+);
+topbarObserver.observe(document.getElementById("topbar"));
+
+// Nearest camera within a fingertip radius (touch) or exactly under the
+// pointer (mouse).
+function cameraNear(point) {
+  const r = isTouch() ? TAP_TOLERANCE_PX : 0;
+  const hits = map.queryRenderedFeatures(
+    r ? [[point.x - r, point.y - r], [point.x + r, point.y + r]] : point,
+    { layers: CAM_LAYERS }
+  );
+  if (!r || hits.length <= 1) return hits[0] || null;
+  const d2 = (f) => {
+    const q = map.project(f.geometry.coordinates);
+    return (q.x - point.x) ** 2 + (q.y - point.y) ** 2;
+  };
+  return hits.reduce((best, f) => (d2(f) < d2(best) ? f : best));
+}
+
+const legendEl = document.getElementById("legend");
+const legendToggle = document.getElementById("legend-toggle");
+const detailEl = document.getElementById("detail");
+const aboutEl = document.getElementById("about");
+const layersEl = document.getElementById("layers");
+const layersBtn = document.getElementById("layers-btn");
+const layersPanel = document.getElementById("layers-panel");
+
+// Disclosure popover for optional map layers.
+function setLayersOpen(open, { restoreFocus = false } = {}) {
+  layersPanel.hidden = !open;
+  layersBtn.setAttribute("aria-expanded", String(open));
+  if (open && isCompact()) {
+    setLegendOpen(false);
+    closeDetail();
+  } else if (!open && restoreFocus) {
+    layersBtn.focus();
+  }
+}
+layersBtn.addEventListener("click", () => setLayersOpen(layersPanel.hidden));
+document.addEventListener("pointerdown", (e) => {
+  if (!layersPanel.hidden && !layersEl.contains(e.target)) setLayersOpen(false);
+});
+
+function setLegendOpen(open, { restoreFocus = false } = {}) {
+  legendEl.classList.toggle("is-open", open);
+  legendToggle.setAttribute("aria-expanded", String(open));
+  if (open && isCompact()) {
+    closeDetail();
+    setLayersOpen(false);
+    document.getElementById("legend-close").focus();
+  } else if (!open && restoreFocus) {
+    legendToggle.focus();
+  }
+}
+legendToggle.addEventListener("click", () =>
+  setLegendOpen(!legendEl.classList.contains("is-open"))
+);
+document.getElementById("legend-close").addEventListener("click", () =>
+  setLegendOpen(false, { restoreFocus: true })
+);
+
+// Slide the map so the selected camera stays visible beside or above the
+// open panel instead of hiding underneath it.
+function padMapForDetail(coords) {
+  const open = !detailEl.classList.contains("hidden");
+  const padding = { top: 0, right: 0, bottom: 0, left: 0 };
+  if (open && isPhone()) padding.bottom = detailEl.offsetHeight;
+  else if (open && MODES.tablet.matches) padding.right = detailEl.offsetWidth;
+  const opts = { padding, duration: MODES.reducedMotion.matches ? 0 : 250 };
+  if (open && coords) opts.center = coords;
+  map.easeTo(opts);
+}
+
+function showDetail(coords) {
+  detailEl.classList.remove("hidden");
+  if (isCompact()) {
+    setLegendOpen(false);
+    setLayersOpen(false);
+  }
+  detailEl.scrollTop = 0;
+  document.getElementById("detail-title")?.focus({ preventScroll: true });
+  if (isCompact()) padMapForDetail(coords);
+}
+
+function closeDetail({ restoreFocus = false } = {}) {
+  if (detailEl.classList.contains("hidden")) return;
+  detailEl.classList.add("hidden");
+  if (isCompact()) padMapForDetail(null);
+  if (restoreFocus) map.getCanvas().focus();
+}
+
+// Re-evaluate the layout when the viewport crosses a breakpoint (rotation,
+// window resize): collapse the legend and drop stale map padding.
+const onModeChange = () => {
+  setLegendOpen(false);
+  if (!detailEl.classList.contains("hidden")) padMapForDetail(null);
+};
+MODES.phone.addEventListener("change", onModeChange);
+MODES.tablet.addEventListener("change", onModeChange);
+
 /* ---------------------------------- misc ------------------------------ */
 
 function esc(s) {
@@ -802,17 +1093,63 @@ function fmtDate(rule) {
 }
 
 document.getElementById("detail-close").addEventListener("click", () =>
-  document.getElementById("detail").classList.add("hidden")
+  closeDetail({ restoreFocus: true })
 );
-document.getElementById("about-btn").addEventListener("click", () =>
-  document.getElementById("about").classList.remove("hidden")
-);
-document.querySelector("#about .modal-close").addEventListener("click", () =>
-  document.getElementById("about").classList.add("hidden")
-);
-document.getElementById("about").addEventListener("click", (e) => {
-  if (e.target.id === "about") e.target.classList.add("hidden");
+
+let aboutOpener = null;
+function openAbout() {
+  aboutOpener = document.activeElement;
+  aboutEl.classList.remove("hidden");
+  aboutEl.querySelector(".modal-close").focus();
+}
+function closeAbout() {
+  aboutEl.classList.add("hidden");
+  if (location.hash === "#about") {
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+  aboutOpener?.focus();
+  aboutOpener = null;
+}
+document.getElementById("about-btn").addEventListener("click", openAbout);
+aboutEl.querySelector(".modal-close").addEventListener("click", closeAbout);
+aboutEl.addEventListener("click", (e) => {
+  if (e.target.id === "about") closeAbout();
+});
+// Old How & why links redirect to index.html#about.
+const openAboutFromHash = () => {
+  if (location.hash === "#about" && aboutEl.classList.contains("hidden")) openAbout();
+};
+openAboutFromHash();
+window.addEventListener("hashchange", openAboutFromHash);
+
+// Escape closes the topmost transient surface; Tab stays inside the modal.
+document.addEventListener("keydown", (e) => {
+  const aboutOpen = !aboutEl.classList.contains("hidden");
+  if (e.key === "Escape") {
+    if (aboutOpen) closeAbout();
+    else if (!layersPanel.hidden) setLayersOpen(false, { restoreFocus: true });
+    else if (legendEl.classList.contains("is-open") && isCompact()) {
+      setLegendOpen(false, { restoreFocus: true });
+    } else if (detailEl.contains(document.activeElement)) {
+      closeDetail({ restoreFocus: true });
+    }
+  } else if (e.key === "Tab" && aboutOpen) {
+    const items = [...aboutEl.querySelectorAll("a[href], button")];
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (!aboutEl.contains(document.activeElement)) {
+      e.preventDefault();
+      first.focus();
+    } else if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 });
 
 /* Test hook: lets the a11y suite render the detail panel deterministically. */
-window.__ff = { openDetail, applyBuffer, map, get cams() { return CAMS; } };
+window.__ff = { openDetail, applyBuffer, map, get cams() { return CAMS; },
+  get conesLoaded() { return CONES_LOADED; } };

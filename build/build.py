@@ -60,6 +60,11 @@ sys.stdout.reconfigure(line_buffering=True)
 RULES_FILE = ROOT / "rules" / "alpr_state_rules.yaml"
 CACHE_DIR = ROOT / "cache"
 OUT_DIR = ROOT / "web" / "data"
+# Cameras with no candidate place within the scan radius can never be
+# flagged at any slider setting, so they ship as lazy per-state shards
+# (the "Nothing found" toggle) instead of in the core cameras.geojson.
+CLEAR_CAMERAS_PREFIX = "cameras_clear_"
+CLEAR_CONES_PREFIX = "view_cones_clear_"
 TAXONOMY_CSV = Path(__file__).resolve().parent / "vendor" / "overture_taxonomy.csv"
 
 OVERPASS_URLS = [
@@ -573,19 +578,24 @@ def road_eval_key(rule: dict) -> str:
 
 
 def load_previous_cameras() -> dict[str, dict]:
-    """camera_id -> {lat, lon, props} from the last emitted cameras.geojson.
-    Seeds road lookups so a routine refresh only queries new or moved
-    cameras. Empty if there is no readable earlier build."""
-    path = OUT_DIR / "cameras.geojson"
-    try:
-        gj = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
+    """camera_id -> {lat, lon, props} from the last emitted camera files
+    (cameras.geojson plus the per-state clear shards). Seeds road lookups
+    so a routine refresh only queries new or moved cameras. Empty if there
+    is no readable earlier build."""
     prev = {}
-    for f in gj.get("features", []):
-        lon, lat = f["geometry"]["coordinates"][:2]
-        prev[f["properties"]["camera_id"]] = {
-            "lat": lat, "lon": lon, "props": f["properties"]}
+    paths = [OUT_DIR / "cameras.geojson",
+             *sorted(OUT_DIR.glob(f"{CLEAR_CAMERAS_PREFIX}*.geojson"))]
+    for i, path in enumerate(paths):
+        try:
+            gj = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            if i == 0:
+                return {}
+            continue
+        for f in gj.get("features", []):
+            lon, lat = f["geometry"]["coordinates"][:2]
+            prev[f["properties"]["camera_id"]] = {
+                "lat": lat, "lon": lon, "props": f["properties"]}
     return prev
 
 
@@ -1134,6 +1144,16 @@ def cone_polygon(lat: float, lon: float, bearing: float) -> list[list[float]]:
     return [ring]
 
 
+def compact_matches(cam_matches: list[dict]) -> str | None:
+    """Matches as a compact JSON string for the web app, or None if empty.
+    Each match drops camera_id: it repeats the parent feature's id."""
+    if not cam_matches:
+        return None
+    return json.dumps(
+        [{k: v for k, v in m.items() if k != "camera_id"} for m in cam_matches],
+        separators=(",", ":"))
+
+
 def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
          default_buffer, rule_states, scan_max, guideline_rules=None):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -1145,10 +1165,14 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
     for m in matches:
         matches_by_cam[m["camera_id"]].append(m)
 
-    # cameras.geojson - every camera in rule states, with status + matches
+    # cameras.geojson - every camera that is, or could become with a wider
+    # radius, a candidate; cameras with no candidate place in the scan
+    # radius go to per-state clear shards loaded on demand
     # view_cones.geojson - illustrative FOV cones where camera:direction exists
     cam_features = []
     cone_features = []
+    clear_cams = defaultdict(list)
+    clear_cones = defaultdict(list)
     for cam in cameras:
         cam_matches = sorted(matches_by_cam.get(cam["camera_id"], []),
                              key=lambda m: m["distance_m"])
@@ -1166,37 +1190,62 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
         else:
             status = "checked_clear"
         bearings = parse_directions(cam["direction"])
-        cam_features.append({
+        # Properties that carry no information (null, false, empty) are
+        # omitted so the ~34k-camera file stays small; the web app treats
+        # a missing key as empty. Descriptive and provenance fields are
+        # never dropped when they have a value.
+        props = {
+            "camera_id": cam["camera_id"],
+            "osm_url": f"https://www.openstreetmap.org/node/{cam['osm_id']}",
+            "state_code": cam["state_code"],
+            "status": status,
+        }
+        optional = {
+            "operator": cam["operator"],
+            "brand": cam["brand"],
+            "direction": cam["direction"],
+            "has_cone": True if bearings else None,
+            "match_count": len(within) or None,
+            "matches": compact_matches(cam_matches),
+            "road_rule_id": cam.get("road_rule_id"),
+            "road_ref": cam.get("road_ref"),
+            "road_phase": cam.get("road_phase"),
+            "road_flag": True if road_flag else None,
+            "road_eval": cam.get("road_eval"),
+        }
+        props.update({k: v for k, v in optional.items() if v is not None})
+        feature = {
             "type": "Feature",
             "geometry": {"type": "Point", "coordinates": [cam["lon"], cam["lat"]]},
-            "properties": {
-                "camera_id": cam["camera_id"],
-                "osm_url": f"https://www.openstreetmap.org/node/{cam['osm_id']}",
-                "state_code": cam["state_code"],
-                "operator": cam["operator"],
-                "brand": cam["brand"],
-                "direction": cam["direction"],
-                "has_cone": bool(bearings),
-                "status": status,
-                "match_count": len(within),
-                "matches": json.dumps(cam_matches),
-                "road_rule_id": cam.get("road_rule_id"),
-                "road_ref": cam.get("road_ref"),
-                "road_phase": cam.get("road_phase"),
-                "road_flag": road_flag,
-                "road_eval": cam.get("road_eval"),
-            },
-        })
-        for b in bearings:
-            cone_features.append({
-                "type": "Feature",
-                "geometry": {"type": "Polygon",
-                             "coordinates": cone_polygon(cam["lat"], cam["lon"], b)},
-                "properties": {"camera_id": cam["camera_id"], "status": status,
-                               "bearing": b},
-            })
+            "properties": props,
+        }
+        cam_cones = [{
+            "type": "Feature",
+            "geometry": {"type": "Polygon",
+                         "coordinates": cone_polygon(cam["lat"], cam["lon"], b)},
+            "properties": {"camera_id": cam["camera_id"], "status": status,
+                           "bearing": b},
+        } for b in bearings]
+        if status == "checked_clear" and not cam_matches:
+            clear_cams[cam["state_code"]].append(feature)
+            clear_cones[cam["state_code"]].extend(cam_cones)
+        else:
+            cam_features.append(feature)
+            cone_features.extend(cam_cones)
     write_geojson("cameras.geojson", cam_features)
     write_geojson("view_cones.geojson", cone_features)
+
+    # Per-state shards for cameras that can never be flagged; stale shards
+    # from an earlier build must not linger.
+    for old in OUT_DIR.glob("*_clear_*.geojson"):
+        old.unlink()
+    clear_shards = {}
+    for st in sorted(clear_cams):
+        write_geojson(f"{CLEAR_CAMERAS_PREFIX}{st}.geojson", clear_cams[st])
+        if clear_cones[st]:
+            write_geojson(f"{CLEAR_CONES_PREFIX}{st}.geojson", clear_cones[st])
+        clear_shards[st] = {"cameras": len(clear_cams[st]),
+                            "cones": len(clear_cones[st])}
 
     # places.geojson - only places involved in >=1 match (keeps file small)
     matched_place_ids = {m["place_id"] for m in matches}
@@ -1284,6 +1333,7 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
         },
         "rule_states": sorted(rule_states),
         "camera_count": len(cameras),
+        "clear_shards": clear_shards,
         "flagged_count": sum(1 for f in cam_features
                              if f["properties"]["status"] == "flagged"),
         "guideline_count": sum(1 for f in cam_features
@@ -1306,7 +1356,8 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
     (OUT_DIR / "DATA_LICENSE.txt").write_text(
         "Data licenses for the files in this directory\n"
         "\n"
-        "cameras.geojson, view_cones.geojson:\n"
+        "cameras.geojson, view_cones.geojson, cameras_clear_*.geojson,\n"
+        "view_cones_clear_*.geojson:\n"
         "  Derived from OpenStreetMap. (c) OpenStreetMap contributors,\n"
         "  Open Database License (ODbL) 1.0. https://www.openstreetmap.org/copyright\n"
         "\n"
@@ -1330,7 +1381,7 @@ def write_geojson(name: str, features: list[dict]) -> None:
     path = OUT_DIR / name
     path.write_text(json.dumps(
         {"type": "FeatureCollection", "features": features},
-        default=json_default), encoding="utf-8")
+        default=json_default, separators=(",", ":")), encoding="utf-8")
     print(f"  wrote {name} ({len(features)} features, {path.stat().st_size/1e6:.1f} MB)")
 
 

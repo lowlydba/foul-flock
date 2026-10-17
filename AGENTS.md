@@ -265,13 +265,29 @@ Checks after any rules change:
 - WCAG 2.1 A/AA is asserted by axe-core via pa11y-ci (config in
   .pa11yci.cjs): `npm ci`, serve web/ with `node tests/serve.cjs 8081 web`,
   then `npm run test:a11y`. Set `A11Y_SCHEME=dark` for the dark scheme
-  (light is the default); CI runs both. It scans the home page and
-  faq.html at load, so interactive states (About modal, detail panel,
-  report letter) aren't covered.
+  (light is the default); CI runs both. It scans the home page at load
+  at desktop, tablet (820px), and phone (390px) viewports, plus the About
+  dialog opened at each, so the detail panel and report letter aren't
+  covered there.
 - `npm run test:map` runs Node/Puppeteer regression tests against the same
-  server for popup text scaling, dismissal, popup accessibility, and
-  viewport-aware zoom limits. Popups render the same in both schemes, so
-  CI runs it once (light job).
+  server for popup text scaling, dismissal, popup accessibility,
+  viewport-aware zoom limits, and the tablet/phone layouts (legend toggle,
+  detail drawer/sheet, 44px touch targets, focus handling). Popups render
+  the same in both schemes, so CI runs it once (light job).
+- Data payload: cameras with no candidate place inside the scan radius
+  (about 80% of cameras) can never be flagged at any slider setting, so
+  build.py emits them as per-state shards (`cameras_clear_ST.geojson`,
+  `view_cones_clear_ST.geojson`, counts in rules.json `clear_shards`)
+  instead of in `cameras.geojson`. The legend's "Nothing found" toggle is
+  off by default; turning it on fetches only the shards for states in view
+  at zoom 6+ (cones at 12+). `view_cones.geojson` itself loads lazily near
+  zoom 13. Camera properties with no information (null, false, empty) are
+  omitted; descriptive and provenance fields are never trimmed.
+- Responsive modes (web/style.css "responsive modes", MODES in app.js; keep
+  the breakpoints in sync): desktop > 1024px, tablet 641-1024px, phone
+  <= 640px. Compact modes collapse the legend behind a topbar button and
+  show the detail panel as a right drawer (tablet) or bottom sheet (phone);
+  touch input uses a 22px tap tolerance on camera dots.
 - CI: .github/workflows/ci.yml runs pytest (tests/python, offline unit
   tests for build.py: geometry, taxonomy mapping, matching, cache/refresh,
   emit) and the pa11y suite (lowlysre/pa11y-ci-action) on push/PR, rolled
@@ -279,7 +295,8 @@ Checks after any rules change:
   in tests/fixtures/data (real
   web/data is gitignored). If you change the data schema, regenerate
   fixtures from a fresh build: keep a couple of cameras per status,
-  matching view cones, a few places, WA/VA/OR states, and the current
+  matching view cones, a few places, WA/VA/OR states, a clear-camera shard
+  (`cameras_clear_VA`), and the current
   rules.json. If you change build.py behavior, extend tests/python too.
 - Python deps are pinned in build/requirements.txt (runtime) and
   tests/python/requirements.txt (tests); dependabot
@@ -330,6 +347,7 @@ Checks after any rules change:
   --scan-max (400 m) for all non-statutory rules and app.js recomputes
   flagged status client-side (applyBuffer). Statutory numeric distances
   are NOT affected by the sliders.
-- Plain-English onboarding lives in web/faq.html ("How & why", linked from
-  the topbar and About modal). Keep it jargon-free and keep the
+- Plain-English onboarding lives in the About dialog in web/index.html
+  (opened by the topbar About button or the #about deep link; web/faq.html
+  is a redirect stub for old How & why links). Keep it jargon-free and keep the
   not-legal-advice framing.
