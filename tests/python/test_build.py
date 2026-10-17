@@ -615,6 +615,9 @@ def test_emit_artifacts(build_mod, sandbox):
     assert set(tiles) == {"cam-clear"}
     clear = tiles["cam-clear"]["properties"]
     assert clear["status"] == "checked_clear"
+    # tile geometry is rounded, so exact coordinates ride along
+    assert (clear["lat_e7"], clear["lon_e7"]) == (485_000_000, -1_220_000_000)
+    assert meta["clear_cone_count"] == 1 and meta["place_count"] == 1
     # the OSM last-edit date rides along when known and is omitted when not
     assert clear["last_edited"] == "2026-01-05"
     assert by_id["cam-flagged"]["last_edited"] == "2025-03-14"
@@ -837,8 +840,11 @@ def test_emit_guideline_status_and_poi(build_mod, sandbox):
     # road lookups seed from the tiles too, or clear cameras would be re-queried
     prev = build_mod.load_previous_cameras()
     assert prev["tx-old"]["props"]["road_ref"] == "TX 71"
-    assert prev["tx-old"]["lat"] == pytest.approx(47.0, abs=2e-5)
+    assert prev["tx-old"]["lat"] == 47.0 and prev["tx-old"]["lon"] == -122.0
     assert set(prev) == {"tx-new", "tx-old", "ct-1"}
+    # optional archives are absent, and rules.json says so, when empty
+    assert meta["clear_camera_count"] == 1 and meta["clear_cone_count"] == 0
+    assert not (out / "clear_cones.pmtiles").exists()
     assert cams["ct-1"]["status"] == "guideline"
     assert meta["flagged_count"] == 0 and meta["guideline_count"] == 2
     assert meta["guideline_states"] == ["CT", "TX"]

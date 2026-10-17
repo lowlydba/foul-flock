@@ -230,14 +230,15 @@ map.on("load", async () => {
 
   map.addSource("states", tileSource("states.pmtiles"));
   map.addSource("cameras", { type: "geojson", data: CAMS });
-  map.addSource("places", tileSource("places.pmtiles"));
   map.addSource("cones", { type: "geojson", data: CONES });
-  // A build with no never-flaggable cameras ships no clear archives.
+  // Optional archives are registered only when the build emitted them: an
+  // absent one would otherwise 404 on every map load.
+  const HAS_PLACES = META.place_count > 0;
   const HAS_CLEAR = META.clear_camera_count > 0;
-  if (HAS_CLEAR) {
-    map.addSource("clear-cams", tileSource("clear_cameras.pmtiles"));
-    map.addSource("clear-cones", tileSource("clear_cones.pmtiles"));
-  }
+  const HAS_CLEAR_CONES = META.clear_cone_count > 0;
+  if (HAS_PLACES) map.addSource("places", tileSource("places.pmtiles"));
+  if (HAS_CLEAR) map.addSource("clear-cams", tileSource("clear_cameras.pmtiles"));
+  if (HAS_CLEAR_CONES) map.addSource("clear-cones", tileSource("clear_cones.pmtiles"));
   map.on("moveend", syncCones);
   map.on("zoomend", updateClearStatus);
 
@@ -281,7 +282,8 @@ map.on("load", async () => {
     },
   });
 
-  map.addLayer({
+  // A build with no protected places in range ships no places archive.
+  if (HAS_PLACES) map.addLayer({
     id: "places-pts",
     type: "symbol",
     source: "places",
@@ -330,7 +332,7 @@ map.on("load", async () => {
     filter: CLEAR_HIDDEN_CONES,
     paint: CONE_PAINT,
   });
-  if (HAS_CLEAR) {
+  if (HAS_CLEAR_CONES) {
     map.addLayer({
       id: "view-cones-clear",
       type: "fill",
@@ -473,7 +475,7 @@ map.on("load", async () => {
     new maplibregl.Popup().setLngLat(e.lngLat).setHTML(html).addTo(map);
   });
 
-  map.on("click", "places-pts", (e) => {
+  if (HAS_PLACES) map.on("click", "places-pts", (e) => {
     if (cameraNear(e.point)) return;
     const p = e.features[0].properties;
     const cat = CATEGORY_LABELS[p.category] || p.category;
@@ -660,7 +662,9 @@ function openDetail(feature) {
   const p = cleanProps(feature.properties);
   const matches = JSON.parse(p.matches || "[]");
   const statutoryMatches = matches.filter((m) => !m.guideline);
-  const coords = feature.geometry.coordinates;
+  const coords = feature.properties.lat_e7 != null
+    ? [feature.properties.lon_e7 / 1e7, feature.properties.lat_e7 / 1e7]
+    : feature.geometry.coordinates; // clear-camera tiles carry exact coordinates
   const el = document.getElementById("detail-body");
 
   let html = `
@@ -987,10 +991,11 @@ document.getElementById("legend-close").addEventListener("click", () =>
 );
 
 // Slide the map so the selected camera stays visible beside or above the
-// open panel instead of hiding underneath it.
+// open panel, and below the topbar, instead of hiding underneath them.
 function padMapForDetail(coords) {
   const open = !detailEl.classList.contains("hidden");
   const padding = { top: 0, right: 0, bottom: 0, left: 0 };
+  if (open && isCompact()) padding.top = topbarHeight();
   if (open && isPhone()) padding.bottom = detailEl.offsetHeight;
   else if (open && MODES.tablet.matches) padding.right = detailEl.offsetWidth;
   const opts = { padding, duration: MODES.reducedMotion.matches ? 0 : 250 };

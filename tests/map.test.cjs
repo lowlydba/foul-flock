@@ -14,6 +14,9 @@ const blankTile = Buffer.from(
 let browser;
 let page;
 let requested = [];
+// Per-test tweaks to what the fixture server returns: files to 404 and
+// edits to rules.json.
+let fixtureOverrides = { missing: [], rules: null };
 
 before(async () => {
   browser = await puppeteer.launch({ args: ["--no-sandbox"] });
@@ -22,6 +25,7 @@ after(async () => {
   if (browser) await browser.close();
 });
 beforeEach(async () => {
+  fixtureOverrides = { missing: [], rules: null };
   page = await browser.newPage();
   page.setDefaultTimeout(15000);
   await page.setViewport({ width: 1280, height: 720 });
@@ -29,8 +33,16 @@ beforeEach(async () => {
   page.on("request", async (request) => {
     const url = new URL(request.url());
     if (url.origin === base && url.pathname.startsWith("/data/")) {
+      const name = path.basename(url.pathname);
+      if (fixtureOverrides.missing.includes(name)) {
+        await request.respond({ status: 404, contentType: "text/plain", body: "not found" });
+        return;
+      }
       try {
-        const body = await readFile(path.join(__dirname, "fixtures", "data", path.basename(url.pathname)));
+        let body = await readFile(path.join(__dirname, "fixtures", "data", name));
+        if (name === "rules.json" && fixtureOverrides.rules) {
+          body = Buffer.from(JSON.stringify(fixtureOverrides.rules(JSON.parse(body))));
+        }
         const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers().range || "");
         if (range) {
           // PMTiles are read with HTTP range requests.
@@ -299,6 +311,15 @@ test("'Nothing found' cameras are off by default and read from static tiles", HA
   assert.match(props.osm_url, /openstreetmap\.org\/node\/9451456653$/);
   assert.equal(props.brand, "Flock Safety");
 
+  // At state zoom the tile geometry is rounded to tens of meters, but the
+  // detail panel must still show the camera's exact position.
+  const lowPt = await page.evaluate((c) => window.__ff.map.project(c), camera);
+  await page.mouse.click(lowPt.x, lowPt.y);
+  await page.waitForSelector("#detail:not(.hidden)");
+  assert.match(await page.$eval("#detail .kv", (el) => el.textContent),
+    /Location:\s*36\.96821, -76\.63465/);
+  await page.click("#detail-close");
+
   // Street zoom: the camera's view cone tile loads too.
   await page.evaluate((c) => window.__ff.map.jumpTo({ center: c, zoom: 14 }), camera);
   await page.waitForFunction(() => window.__ff.map.querySourceFeatures(
@@ -312,15 +333,38 @@ test("'Nothing found' cameras are off by default and read from static tiles", HA
   assert.match(await page.$eval("#detail", (el) => el.textContent), /nothing found/i);
   assert.match(await page.$eval("#detail", (el) => el.textContent),
     /Last edited:\s*2026-01-05 \(.+\)/);
-  const where = await page.$eval("#detail .kv", (el) => el.textContent);
-  const [lat, lon] = where.match(/-?\d+\.\d+/g).map(Number);
-  assert.ok(Math.abs(lat - camera[1]) < 1e-4 && Math.abs(lon - camera[0]) < 1e-4,
-    `tile position drifted: ${where}`);
+  assert.match(await page.$eval("#detail .kv", (el) => el.textContent),
+    /Location:\s*36\.96821, -76\.63465/);
 
   await page.click("#layers-btn");
   await page.click("#clear-toggle");
   assert.equal((await layer("cams-clear-far")).visibility, "none");
   assert.equal(await status(), "");
+});
+
+test("optional archives the build omitted are never requested", HARD_TIMEOUT, async () => {
+  fixtureOverrides = {
+    missing: ["places.pmtiles", "clear_cones.pmtiles"],
+    rules: (r) => ({ ...r, place_count: 0, clear_cone_count: 0 }),
+  };
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("response", (r) => { if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`); });
+  await page.reload();
+  await page.waitForFunction(() => Boolean(window.__ff) &&
+    !/loading/i.test(document.getElementById("stats").textContent));
+  const has = (id) => page.evaluate((i) => Boolean(window.__ff.map.getLayer(i)), id);
+  assert.equal(await has("places-pts"), false);
+  assert.equal(await has("view-cones-clear"), false);
+  assert.equal(await has("cams-clear-far"), true, "clear cameras are still in the build");
+
+  await page.click("#layers-btn");
+  await page.click("#clear-toggle");
+  await page.evaluate(() => window.__ff.map.jumpTo({ center: [-76.63, 36.97], zoom: 14 }));
+  await new Promise((r) => setTimeout(r, 800));
+  assert.deepEqual(errors, []);
+  assert.ok(!requested.slice(requested.lastIndexOf(base + "/")).some(
+    (u) => /places\.pmtiles|clear_cones\.pmtiles/.test(u)), "no request for omitted archives");
 });
 
 test("Layers control is a labelled disclosure with a real switch, and the legend stays a pure key", HARD_TIMEOUT, async () => {
@@ -437,6 +481,8 @@ for (const mode of MODES) {
     const topbar = await box("#topbar");
     assert.ok(d.top >= topbar.bottom - 1, "detail must not cover the topbar");
     assert.ok(d.left >= 0 && d.right <= width && d.bottom <= height);
+    // The selected camera is centered below the topbar, not under it.
+    await page.waitForFunction((min) => window.__ff.map.getPadding().top >= min, {}, Math.floor(topbar.bottom));
     if (mode.name === "phone") {
       assert.equal(Math.round(d.width), width);
       assert.equal(Math.round(d.bottom), height);

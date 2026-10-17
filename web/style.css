@@ -364,7 +364,8 @@ body { padding: 0; }
    gets large targets without losing its desktop layout. */
 
 #topbar { padding-left: max(16px, env(safe-area-inset-left));
-  padding-right: max(16px, env(safe-area-inset-right)); }
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-top: max(10px, env(safe-area-inset-top)); }
 #legend-toggle, #legend-close { display: none; }
 #legend-toggle { width: auto; margin: 0; padding: 4px 12px; font-size: 13px;
   background: var(--card); color: var(--accent-text);
@@ -438,7 +439,7 @@ button, a, summary, input[type="range"] { touch-action: manipulation; }
 /* ---- Phone: <= 640px ---- */
 @media (max-width: 640px) {
   #topbar { flex-wrap: wrap; align-items: center; gap: 2px 8px;
-    padding-top: 6px; padding-bottom: 4px; }
+    padding-top: max(6px, env(safe-area-inset-top)); padding-bottom: 4px; }
   #topbar h1 { order: 1; flex: 1 1 auto; font-size: 17px; }
   #topbar h1 .ff-sub { display: none; }
   #legend-toggle { order: 2; display: inline-grid; place-items: center; }
@@ -488,7 +489,9 @@ button, a, summary, input[type="range"] { touch-action: manipulation; }
   .report-actions { flex-wrap: wrap; }
   .report-actions button { font-size: 14px; flex: 1 1 140px; }
 
-  .modal { padding: 8px; align-items: stretch; }
+  .modal { align-items: stretch;
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
   .modal-card { max-height: none; width: 100%; font-size: 15px; }
   .modal-body { padding: 18px 16px;
     padding-left: max(16px, env(safe-area-inset-left));

@@ -79,9 +79,6 @@ CLEAR_CAMERAS_ZOOMS = (6, 12)
 CONE_TILE_ZOOM = 13
 PLACES_ZOOMS = (10, 12)
 STATES_ZOOMS = (0, 7)
-# Cameras are tiled to a ~1.2 m grid, so a "same position" check against a
-# previous build tolerates a little drift (degrees, about 5 m).
-SEED_POSITION_TOLERANCE_DEG = 5e-5
 TAXONOMY_CSV = Path(__file__).resolve().parent / "vendor" / "overture_taxonomy.csv"
 
 OVERPASS_URLS = [
@@ -616,9 +613,11 @@ def load_previous_cameras() -> dict[str, dict]:
                   "road lookups will not be reused for them")
     prev = {}
     for f in features:
+        props = f["properties"]
         lon, lat = f["geometry"]["coordinates"][:2]
-        prev[f["properties"]["camera_id"]] = {
-            "lat": lat, "lon": lon, "props": f["properties"]}
+        if "lat_e7" in props:  # tile geometry is rounded; use the exact position
+            lat, lon = props["lat_e7"] / 1e7, props["lon_e7"] / 1e7
+        prev[props["camera_id"]] = {"lat": lat, "lon": lon, "props": props}
     return prev
 
 
@@ -648,8 +647,8 @@ def apply_road_guidelines(cameras: list[dict], guideline_rules: list[dict],
         for cam in st_cams:
             prev = previous.get(cam["camera_id"])
             same = (prev is not None
-                    and abs(prev["lat"] - cam["lat"]) <= SEED_POSITION_TOLERANCE_DEG
-                    and abs(prev["lon"] - cam["lon"]) <= SEED_POSITION_TOLERANCE_DEG
+                    and round(prev["lat"], 6) == round(cam["lat"], 6)
+                    and round(prev["lon"], 6) == round(cam["lon"], 6)
                     and prev["props"].get("road_eval") == key)
             if not same:
                 todo.append(cam)
@@ -1251,6 +1250,10 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
                            "bearing": b},
         } for b in bearings]
         if status == "checked_clear" and not cam_matches:
+            # Tile geometry is rounded per zoom (tens of meters at zoom 6),
+            # so the exact position rides along for the detail panel.
+            props["lat_e7"] = round(cam["lat"] * 1e7)
+            props["lon_e7"] = round(cam["lon"] * 1e7)
             clear_cams.append(feature)
             clear_cones.extend(cam_cones)
         else:
@@ -1377,6 +1380,9 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
         "rule_states": sorted(rule_states),
         "camera_count": len(cameras),
         "clear_camera_count": len(clear_cams),
+        # Optional archives: the web app only registers sources for these.
+        "clear_cone_count": len(clear_cones),
+        "place_count": len(place_features),
         "rule_bounds": rule_bounds,
         "flagged_count": sum(1 for f in cam_features
                              if f["properties"]["status"] == "flagged"),
