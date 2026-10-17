@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-10-16T18:00:28.310467+00:00",
+ "generated_at": "2026-10-17T16:13:45.341592+00:00",
  "default_heuristic_buffer_m": 100,
  "heuristic_scan_max_m": 400,
  "sliders": {
@@ -24,9 +24,18 @@
   "VA",
   "WA"
  ],
- "camera_count": 33890,
+ "camera_count": 33897,
+ "clear_camera_count": 26819,
+ "clear_cone_count": 27381,
+ "place_count": 8094,
+ "rule_bounds": [
+  -124.7544,
+  36.5408,
+  -75.2427,
+  49.0024
+ ],
  "flagged_count": 486,
- "guideline_count": 3031,
+ "guideline_count": 3028,
  "guideline_states": [
   "CT",
   "FL",
@@ -1055,14 +1064,5 @@
    "last_verified": "2026-07-18",
    "source_url": "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
   }
- ],
- "clear_camera_count": 26813,
- "clear_cone_count": 27376,
- "place_count": 8093,
- "rule_bounds": [
-  -124.7644,
-  36.5408,
-  -75.2427,
-  49.0024
  ]
 }
