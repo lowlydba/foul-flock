@@ -168,9 +168,23 @@ def _stac_index(release: str):
                       "scanning full datasets instead")
                 break
             wait = STAC_RETRY_WAITS[attempt]
+            from datetime import datetime, timezone
+            from email.utils import parsedate_to_datetime
+
             retry_after = (getattr(e, "headers", None) or {}).get("Retry-After")
-            if retry_after and str(retry_after).isdigit():
-                wait = max(wait, min(int(retry_after), 300))
+            if retry_after:
+                try:
+                    retry_wait = int(retry_after)
+                except (TypeError, ValueError):
+                    try:
+                        retry_at = parsedate_to_datetime(retry_after)
+                        if retry_at.tzinfo is None:
+                            retry_at = retry_at.replace(tzinfo=timezone.utc)
+                        retry_wait = (
+                            retry_at - datetime.now(timezone.utc)).total_seconds()
+                    except (TypeError, ValueError, OverflowError):
+                        retry_wait = 0
+                wait = max(wait, retry_wait)
             print(f"    STAC index fetch failed ({e}); retrying in {wait}s")
             time.sleep(wait)
     _STAC_INDEX[release] = table
