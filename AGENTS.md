@@ -79,6 +79,8 @@ Procedure:
      `maintainer_notes`; `summary` is shown to users.
    - Always bump `last_verified` on anything you actually checked.
 4. Rebuild and verify (see "Rebuild and verify" below).
+5. If the set of statute or guideline states changed, update the coverage
+   line under "What's on the map" in `README.md`.
 
 States most likely to change (active bills as of mid-2026): CA (vetoed
 SB 274 may return), CO (SB 26-070 lost, may return), and any state listed
