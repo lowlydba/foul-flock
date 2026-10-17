@@ -146,9 +146,12 @@ are cached and skipped.
 
 Overture notes (places, divisions): streamed from the public S3 release
 via the official `overturemaps` package; anonymous reads, no credentials.
-Reads go through the package's STAC index, which opens only the files that
-intersect the bbox so cost tracks the query area as the dataset grows; an
-unreachable index falls back to a full dataset scan.
+Reads go through the release's STAC index, which opens only the files that
+intersect the bbox so cost tracks the query area as the dataset grows. The
+build downloads that index once per run and filters it locally (the package
+refetches it per query, which draws HTTP 429s; see
+OvertureMaps/overturemaps-py#150), retrying 429/5xx with backoff; an
+index that stays unreachable falls back to a full dataset scan.
 Places are cached per state AFTER category filtering, and the cache file
 records the category codes used, so editing `category_overture_mapping`
 self-invalidates the cache on the next online build. A place's category

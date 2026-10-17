@@ -213,50 +213,123 @@ def test_refresh_roads_scope_bypasses_reuse(build_mod, sandbox, monkeypatch):
         build_mod.main()
 
 
-def test_overture_reader_uses_stac_and_falls_back(build_mod, monkeypatch):
+def _stac_index_bytes():
+    import io
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    def asset(key):
+        return {"aws": {"alternate": {"s3": {"href": f"s3://bucket/{key}"}}}}
+
+    table = pa.table({
+        "collection": ["place", "place", "division_area"],
+        "type": ["Feature"] * 3,
+        "bbox": [{"xmin": 0.0, "ymin": 0.0, "xmax": 1.0, "ymax": 1.0},
+                 {"xmin": 5.0, "ymin": 5.0, "xmax": 6.0, "ymax": 6.0},
+                 {"xmin": 0.0, "ymin": 0.0, "xmax": 1.0, "ymax": 1.0}],
+        "assets": [asset("p0"), asset("p5"), asset("d0")],
+    })
+    buf = io.BytesIO()
+    pq.write_table(table, buf)
+    return buf.getvalue()
+
+
+@pytest.fixture()
+def fake_overture(build_mod, monkeypatch):
+    """overturemaps stub plus a fresh STAC index memo; file reads return
+    the list of files the reader was asked to open."""
     import types
 
-    calls = []
-
-    def fake_reader(overture_type, bbox=None, stac=False, **kw):
-        calls.append(stac)
-        if stac and fake_reader.fail:
-            raise RuntimeError("index down")
-        return fake_reader.result
-
-    core = types.SimpleNamespace(record_batch_reader=fake_reader)
+    monkeypatch.setattr(build_mod, "_STAC_INDEX", {})
+    monkeypatch.setattr(build_mod.time, "sleep", lambda s: None)
+    monkeypatch.setattr(build_mod, "_files_reader",
+                        lambda files, bbox: iter([files]))
+    core = types.SimpleNamespace(
+        get_latest_release=lambda: "2026-01-01.0",
+        record_batch_reader=lambda *a, **k: iter(["full scan"]))
     monkeypatch.setitem(sys.modules, "overturemaps",
                         types.SimpleNamespace(core=core))
+    return core
 
-    fake_reader.fail, fake_reader.result = False, iter(["batch"])
-    assert list(build_mod._overture_reader("place", (0, 0, 1, 1))) == ["batch"]
-    assert calls == [True]
 
-    # STAC returns None (reader construction failed): retried without STAC
-    calls.clear()
-    fake_reader.fail = False
-    results = [None, iter(["batch"])]
+def test_overture_reader_downloads_stac_index_once(build_mod, monkeypatch,
+                                                   fake_overture):
+    gets = []
+    monkeypatch.setattr(build_mod, "_http_get",
+                        lambda url: gets.append(url) or _stac_index_bytes())
 
-    def seq_reader(overture_type, bbox=None, stac=False, **kw):
-        calls.append(stac)
-        return results.pop(0)
+    assert list(build_mod._overture_reader("place", (0.5, 0.5, 0.6, 0.6))) \
+        == [["bucket/p0"]]
+    assert list(build_mod._overture_reader("division_area", (0, 0, 2, 2))) \
+        == [["bucket/d0"]]
+    # no intersecting file: nothing to open, and no full-scan fallback
+    assert list(build_mod._overture_reader("place", (9, 9, 10, 10))) == [[]]
+    assert gets == ["https://stac.overturemaps.org/2026-01-01.0/"
+                    "collections.parquet"]
 
-    core.record_batch_reader = seq_reader
-    assert list(build_mod._overture_reader("place", (0, 0, 1, 1))) == ["batch"]
-    assert calls == [True, False]
 
-    # no reader on either attempt: the build stops instead of caching nothing
-    calls.clear()
-    core.record_batch_reader = lambda *a, **k: calls.append(1)
+def test_files_reader_with_no_files_is_empty(build_mod):
+    assert list(build_mod._files_reader([], (0, 0, 1, 1))) == []
+
+
+def test_stac_index_retries_rate_limits(build_mod, monkeypatch, fake_overture):
+    import urllib.error
+
+    sleeps, responses = [], []
+    monkeypatch.setattr(build_mod.time, "sleep", sleeps.append)
+
+    def flaky_get(url):
+        if len(responses) < 2:
+            hdrs = {"Retry-After": "45"} if not responses else {}
+            responses.append(429)
+            raise urllib.error.HTTPError(url, 429, "Too Many Requests",
+                                         hdrs, None)
+        return _stac_index_bytes()
+
+    monkeypatch.setattr(build_mod, "_http_get", flaky_get)
+    assert list(build_mod._overture_reader("place", (0, 0, 1, 1))) \
+        == [["bucket/p0"]]
+    assert sleeps == [45, 30]
+
+
+def test_overture_reader_falls_back_when_index_unreachable(
+        build_mod, monkeypatch, fake_overture):
+    import urllib.error
+
+    gets = []
+
+    def down(url):
+        gets.append(url)
+        raise urllib.error.URLError("unreachable")
+
+    monkeypatch.setattr(build_mod, "_http_get", down)
+    assert list(build_mod._overture_reader("place", (0, 0, 1, 1))) \
+        == ["full scan"]
+    # the failure is remembered: later queries skip straight to the scan
+    assert list(build_mod._overture_reader("place", (0, 0, 1, 1))) \
+        == ["full scan"]
+    assert len(gets) == len(build_mod.STAC_RETRY_WAITS) + 1
+
+    # no reader from the fallback either: the build stops
+    fake_overture.record_batch_reader = lambda *a, **k: None
     with pytest.raises(SystemExit, match="reader unavailable"):
         build_mod._overture_reader("place", (0, 0, 1, 1))
-    core.record_batch_reader = fake_reader
 
-    # index unreachable: retried without STAC
-    calls.clear()
-    fake_reader.fail, fake_reader.result = True, iter(["batch"])
-    assert list(build_mod._overture_reader("place", (0, 0, 1, 1))) == ["batch"]
-    assert calls == [True, False]
+
+def test_stac_index_does_not_retry_client_errors(build_mod, monkeypatch,
+                                                 fake_overture):
+    import urllib.error
+
+    gets = []
+
+    def missing(url):
+        gets.append(url)
+        raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+
+    monkeypatch.setattr(build_mod, "_http_get", missing)
+    assert build_mod._stac_index("2026-01-01.0") is None
+    assert len(gets) == 1
 
 
 def test_fetch_places_cache_and_mapping_invalidation(build_mod, sandbox):
