@@ -313,6 +313,10 @@ test("'Nothing found' cameras are off by default and read from static tiles", HA
 
   // At state zoom the tile geometry is rounded to tens of meters, but the
   // detail panel must still show the camera's exact position.
+  await page.evaluate(() => new Promise((r) => {
+    window.__ff.map.once("idle", r);
+    window.__ff.map.triggerRepaint(); // idle fires after the next frame even if already settled
+  }));
   const lowPt = await page.evaluate((c) => window.__ff.map.project(c), camera);
   await page.mouse.click(lowPt.x, lowPt.y);
   await page.waitForSelector("#detail:not(.hidden)");
