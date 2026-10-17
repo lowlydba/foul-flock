@@ -1055,5 +1055,12 @@
    "last_verified": "2026-07-18",
    "source_url": "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
   }
+ ],
+ "clear_camera_count": 26813,
+ "rule_bounds": [
+  -124.7644,
+  36.5408,
+  -75.2427,
+  49.0024
  ]
 }
