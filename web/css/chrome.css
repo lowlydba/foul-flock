@@ -1,0 +1,134 @@
+/* Map chrome: page shell, topbar, legend, and the Layers control. */
+
+/* ------------------------------- map page ------------------------------ */
+
+html, body { margin: 0; height: 100%; }
+body { padding: 0; }
+#map { position: absolute; inset: 0; }
+
+#topbar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+  max-width: none; margin: 0;
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 10px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+}
+#topbar h1 { font-size: 16px; font-weight: 650; margin: 0;
+  letter-spacing: -.01em; color: var(--ink); }
+#topbar h1 .ff-sub { font-size: 12.5px; color: var(--muted); font-weight: 400;
+  margin-left: 10px; letter-spacing: 0; }
+#stats { font-size: 12px; color: var(--muted); flex: 1;
+  font-family: var(--font-data); }
+#about-btn {
+  width: auto; margin: 0; padding: 4px 12px; font-size: 13px;
+  background: var(--card); color: var(--accent-text);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+#about-btn:hover { border-color: var(--accent-text); }
+
+/* ------------------------------- legend -------------------------------- */
+
+#legend {
+  position: absolute; bottom: 34px; left: 12px; z-index: 5;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; max-width: 254px; font-size: 12.5px; color: var(--ink);
+  box-shadow: 0 2px 10px var(--shadow); line-height: 1.4;
+}
+.legend-title { font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--muted); margin-bottom: 5px;
+  font-weight: 600; }
+#legend .row { display: flex; align-items: center; gap: 7px; margin: 3px 0;
+  white-space: nowrap; }
+#legend em { color: var(--muted); font-style: normal; font-size: 11px; }
+#method-notes { margin: 8px 0 0; border-top: 1px solid var(--border);
+  padding-top: 6px; }
+#method-notes summary { font-size: 11.5px; color: var(--muted);
+  line-height: 1.4; }
+#buffer-note { color: var(--muted); font-size: 11.5px; max-width: 230px;
+  white-space: normal; max-height: 40vh; overflow-y: auto; }
+#buffer-note dl { margin: 6px 0 0; }
+#buffer-note dt { color: var(--ink); font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .06em; margin: 9px 0 1px; }
+#buffer-note dt:first-child { margin-top: 2px; }
+#buffer-note dd { margin: 0; line-height: 1.45; }
+#buffer-note em { font-size: inherit; color: var(--ink); font-style: italic; }
+#buffer-note code { font-size: 10.5px; padding: 0 3px; }
+
+.dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto;
+  border: 1.5px solid rgba(0,0,0,.35); }
+.dot.flagged { background: var(--flagged); }
+.dot.clear { background: var(--clear); }
+.dot.excluded { background: var(--excluded); }
+.dot.guideline { background: var(--guideline); }
+.swatch { width: 14px; height: 12px; flex: 0 0 auto; border-radius: 3px;
+  opacity: .8; border: 1px solid rgba(0,0,0,.3); }
+.swatch.law { background: var(--law); }
+.swatch.guideline { background: var(--guideline); }
+.swatch.nolaw { background: var(--nolaw); }
+.icon-chip { width: 14px; height: 14px; flex: 0 0 auto; border-radius: 4px; }
+
+/* ---------------------------- layers control --------------------------- */
+
+#layers {
+  position: absolute; z-index: 5;
+  top: calc(var(--topbar-h, 56px) + 10px);
+  left: max(12px, env(safe-area-inset-left));
+}
+#layers-btn {
+  display: inline-flex; align-items: center; gap: 6px; width: auto;
+  margin: 0; padding: 6px 12px; font-size: 13px; min-height: 36px;
+  background: var(--card); color: var(--accent-text);
+  border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 2px 10px var(--shadow);
+}
+#layers-btn:hover, #layers-btn[aria-expanded="true"] {
+  border-color: var(--accent-text); }
+#layers-panel {
+  margin-top: 6px; width: min(300px, calc(100vw - 24px));
+  background: var(--bg); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 2px 10px var(--shadow); padding: 10px 14px 12px;
+  font-size: 13px; line-height: 1.4;
+}
+#layers-panel[hidden] { display: none; }
+#layers-panel { display: block; }
+.switch-row { display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 14px; margin: 6px 0 0; }
+.switch-row input[role="switch"] { flex: 0 0 auto; margin: 2px 0 0; }
+.switch-label { display: block; font-weight: 600; }
+.switch-row small { display: block; color: var(--muted); font-size: 12px;
+  margin-top: 2px; }
+#clear-status { margin: 8px 0 0; min-height: 1.4em; }
+
+.legend-sub { font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); font-weight: 600; margin: 9px 0 1px; }
+#legend .legend-title + .legend-group .legend-sub { margin-top: 2px; }
+.legend-swatches { display: flex; flex-wrap: wrap; gap: 0 14px; }
+.radii { margin-top: 9px; border-top: 1px solid var(--border); padding-top: 2px; }
+.radii .legend-sub { margin-top: 6px; }
+
+.buffer-row { display: flex; align-items: center; gap: 6px; margin: 4px 0 2px; }
+.buffer-row label { font-size: 11px; color: var(--muted); margin: 0;
+  white-space: nowrap; width: 72px; }
+.buffer-row input[type="range"] { flex: 1; min-width: 56px; margin: 0; }
+.buffer-row input[type="range"]::-webkit-slider-thumb {
+  width: 12px; height: 12px; margin-top: -3px; }
+.buffer-row input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; }
+.buffer-row output { font-size: 11.5px; font-weight: 600; min-width: 44px;
+  text-align: right; font-family: var(--font-data); }
+
+#topbar { padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-top: max(10px, env(safe-area-inset-top)); }
+#legend-toggle, #legend-close { display: none; }
+#legend-toggle { width: auto; margin: 0; padding: 4px 12px; font-size: 13px;
+  background: var(--card); color: var(--accent-text);
+  border: 1px solid var(--border); border-radius: 6px; }
+#legend-toggle:hover, #legend-toggle[aria-expanded="true"] {
+  border-color: var(--accent-text); }
+#legend-close { position: absolute; top: 4px; right: 6px; width: auto;
+  margin: 0; padding: 0 8px; border: none; background: none;
+  font-size: 24px; line-height: 1; color: var(--muted); }
+button, a, summary, input[type="range"] { touch-action: manipulation; }

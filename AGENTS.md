@@ -8,9 +8,39 @@ Model-agnostic: assumes only web search, file editing, and a shell.
 A static map flagging ALPR cameras near legally-protected locations
 (schools, worship, healthcare, courts, food banks) under state siting
 statutes. The legal core is `rules/alpr_state_rules.yaml` (hand-curated,
-never scraped). `build/build.py` fetches cameras from OSM/Overpass and
+never scraped). `build/build.py` (the entry point for the `build/foulflock`
+package) fetches cameras from OSM/Overpass and
 places + state boundaries from Overture Maps, matches, and emits
-`web/data/*.geojson` consumed by the static MapLibre app in `web/`.
+`web/data/*.geojson` and PMTiles archives consumed by the static MapLibre app in `web/`.
+
+## Code layout
+
+Each concern has its own module; start from the one named for what you're
+changing.
+
+- Build (`build/foulflock/`, run through `build/build.py`): `config` (paths,
+  archive names, zoom ranges, refresh scopes), `rulesfile` (rules YAML
+  schema and loading), `overpass` (mirrors, cache, camera query),
+  `guidelines` (road-class guideline lookups), `overture` (taxonomy,
+  divisions, places), `matching`, `viewcones`, `artifacts` (writes
+  web/data), `cli` (flags and the five build steps). Modules call each
+  other through the module (`config.OUT_DIR`, `overpass.overpass_query`),
+  so patching a name on its defining module changes what the whole
+  pipeline sees. `build/vectortiles.py` is the standalone tiler and
+  PMTiles writer.
+- Frontend (`web/js/`, native ES modules, no bundler; `main.js` is the
+  entry): `config`, `state` (shared mutable state), `map`, `layers`,
+  `interactions`, `radius` (sliders and status recomputation),
+  `clear-layer`, `detail` (panel and draft letter), `panels`, `dialogs`,
+  `layout` (responsive modes), `icons`, `util`. CSS is split the same way
+  under `web/css/`: `tokens`, `chrome`, `panels`, `maplibre`, `responsive`,
+  loaded in that order after Pico.
+- Python tests (`tests/python/`): one file per area (`test_fetch`,
+  `test_matching`, `test_artifacts`, `test_guidelines`, `test_taxonomy`,
+  `test_geometry`, `test_vectortiles`, `test_rules`), shared builders in
+  `factories.py`. The `build_mod` fixture in `conftest.py` exposes the
+  whole package as one namespace and routes monkeypatches to the defining
+  module.
 
 Read `README.md` first. Honesty rules are non-negotiable:
 
@@ -106,7 +136,11 @@ python build\build.py --refresh places,divisions   # just Overture data
 ```
 
 Overpass etiquette (cameras): the script rotates mirrors (overpass-api.de,
-kumi.systems, private.coffee) with backoff; do not tighten the sleep. If a
+kumi.systems, private.coffee) with backoff; do not tighten the sleep. The
+camera query uses `out meta` so each node's last OSM edit date lands in
+`last_edited` (shown in the detail panel and cited in the draft letter);
+only the date is kept, never the editor's identity. Caches written before
+that change lack the date until the next `--refresh cameras`. If a
 mirror hangs, delete the partial cache file and rerun - completed queries
 are cached and skipped.
 
@@ -124,13 +158,15 @@ places carry codes the vendored file lacks.
 
 State boundaries are effectively static, so divisions are seeded from the
 previous build's `states.geojson`. Only a state missing from it is streamed,
-with a tiny bbox probe at an interior point (INTERIOR_POINTS in build.py).
+with a tiny bbox probe at an interior point (INTERIOR_POINTS in build/foulflock/overture.py).
 Each probe takes about 10 s because the full-resolution polygons are large.
 `--refresh divisions` forces a real fetch. Geometry is simplified (~1 km)
 for the national overlay.
 
 Road lookups for `road_class` guidelines are seeded the same way: cameras
-whose id and position match the previous `cameras.geojson`, evaluated under
+whose id and position match the previous `cameras.geojson` or
+`clear_cameras.pmtiles` (positions there are tile-rounded, so "match" allows
+about 5 m), evaluated under
 the same rule configuration, reuse its result, so a routine refresh only
 queries new or moved cameras. A cold run (no previous build, a changed
 `road_ref_regex`/`road_buffer_m`, or `--refresh roads`) looks up every
@@ -141,7 +177,7 @@ result until it moves.
 
 ## Rules-file field reference (beyond the obvious)
 
-`validate_rules_doc` in `build/build.py` enforces the schema on every build
+`validate_rules_doc` in `build/foulflock/rulesfile.py` enforces the schema on every build
 and in `tests/python/test_rules.py`; its error messages list every missing or
 inconsistent field. The file has two entry lists:
 
@@ -206,13 +242,13 @@ inconsistent field. The file has two entry lists:
 ## Rebuild and verify
 
 ```powershell
-pip install pyyaml overturemaps
+pip install pyyaml overturemaps pmtiles shapely     # or: pip install -r build\requirements.txt
 python build\build.py --offline                     # cache-only rebuild
-python -m http.server 8080 -d web                   # serve locally
+node tests\serve.cjs 8080 web                       # serve locally (PMTiles need range requests)
 ```
 
-(`--offline` needs only pyyaml; the overturemaps package is required for
-any non-cached fetch.)
+(`--offline` needs pyyaml, pmtiles and shapely; the overturemaps package is
+required for any non-cached fetch.)
 
 Checks after any rules change:
 
@@ -224,7 +260,7 @@ Checks after any rules change:
    counter on `properties.law_status`.
 4. Load the map: click a flagged camera in each affected state; confirm the
    citation, quoted statutory language, and report-letter draft render.
-5. `node --check web/app.js` if you touched the frontend.
+5. `node --check` each file in `web/js/` you touched.
 
 ## UI conventions (keep consistent if editing web/)
 
@@ -248,9 +284,9 @@ Checks after any rules change:
 ## Theming and accessibility (enforced by CI)
 
 - Theme sits on Pico CSS (classless build, vendored at
-  web/assets/pico.classless.min.css, loaded before style.css): Pico owns
+  web/assets/pico.classless.min.css, loaded before web/css/): Pico owns
   base typography, links, buttons, form controls, details, and the
-  light/dark switch. style.css owns the theme tokens (fonts + teal accent
+  light/dark switch. web/css/tokens.css owns the theme tokens (fonts + teal accent
   set via --pico-* variables in :root, dark overrides mirror Pico's
   `:root:not([data-theme=light])` selector) and the map chrome. To
   restyle, change the --pico-* variables; don't reintroduce base-element
@@ -265,22 +301,55 @@ Checks after any rules change:
 - WCAG 2.1 A/AA is asserted by axe-core via pa11y-ci (config in
   .pa11yci.cjs): `npm ci`, serve web/ with `node tests/serve.cjs 8081 web`,
   then `npm run test:a11y`. Set `A11Y_SCHEME=dark` for the dark scheme
-  (light is the default); CI runs both. It scans the home page and
-  faq.html at load, so interactive states (About modal, detail panel,
-  report letter) aren't covered.
+  (light is the default); CI runs both. It scans the home page at load
+  at desktop, tablet (820px), and phone (390px) viewports, plus the About
+  dialog opened at each, so the detail panel and report letter aren't
+  covered there.
 - `npm run test:map` runs Node/Puppeteer regression tests against the same
-  server for popup text scaling, dismissal, popup accessibility, and
-  viewport-aware zoom limits. Popups render the same in both schemes, so
-  CI runs it once (light job).
+  server for popup text scaling, dismissal, popup accessibility,
+  viewport-aware zoom limits, and the tablet/phone layouts (legend toggle,
+  detail drawer/sheet, 44px touch targets, focus handling). Popups render
+  the same in both schemes, so CI runs it once (light job).
+- Data payload: cameras with no candidate place inside the scan radius
+  (about 80% of cameras) can never be flagged at any slider setting, so
+  the build emits them, and their view cones, as static vector tiles
+  (`clear_cameras.pmtiles`, `clear_cones.pmtiles`) instead of in
+  `cameras.geojson`, which the slider logic keeps in memory. States and
+  protected places are `states.pmtiles` and `places.pmtiles` too. The
+  Layers panel's "Cameras with nothing found" switch is off by default;
+  MapLibre reads the archives by HTTP range request, so only tiles in view
+  transfer (cameras draw from zoom 6, cones from 13). Candidate cones stay
+  in `view_cones.geojson`, which loads lazily near zoom 13 and is restyled
+  as slider changes flip camera status. `build/vectortiles.py` is the
+  tiler and PMTiles writer (pins: `pmtiles` and `shapely` in
+  build/requirements.txt); `web/assets/pmtiles.js` is the vendored reader
+  (pmtiles 4.5.0, BSD-3-Clause; to update, copy `dist/pmtiles.js` from the
+  npm package and rerun `npm run test:map`). `states.geojson` stays in
+  web/data only as the full-resolution seed for the next build; the app
+  never fetches it. rules.json carries `rule_bounds` (initial fit) and
+  `clear_camera_count`. Static hosts must support range requests
+  (GitHub Pages and `tests/serve.cjs` do; `python -m http.server` does
+  not). Camera properties with no information (null, false, empty) are
+  omitted; descriptive and provenance fields are never trimmed. Tile
+  positions are rounded to ~1 m, so `last_edited`, `osm_url` and the node
+  id remain the exact reference.
+- Responsive modes (web/css/responsive.css, MODES in web/js/layout.js; keep
+  the breakpoints in sync): desktop > 1024px, tablet 641-1024px, phone
+  <= 640px. Compact modes collapse the legend behind a topbar button and
+  show the detail panel as a right drawer (tablet) or bottom sheet (phone);
+  touch input uses a 22px tap tolerance on camera dots.
 - CI: .github/workflows/ci.yml runs pytest (tests/python, offline unit
-  tests for build.py: geometry, taxonomy mapping, matching, cache/refresh,
+  tests for the build pipeline: geometry, taxonomy mapping, matching, cache/refresh,
   emit) and the pa11y suite (lowlysre/pa11y-ci-action) on push/PR, rolled
   into one required check via are-we-good. The pa11y job uses fixture data
   in tests/fixtures/data (real
   web/data is gitignored). If you change the data schema, regenerate
   fixtures from a fresh build: keep a couple of cameras per status,
-  matching view cones, a few places, WA/VA/OR states, and the current
-  rules.json. If you change build.py behavior, extend tests/python too.
+  matching view cones, a few places, WA/VA/OR states, a clear camera with
+  its cone, the PMTiles archives (regenerate them from GeoJSON with
+  `python build/vectortiles.py in.geojson out.pmtiles --layer L --minzoom
+  A --maxzoom B`, using the zoom constants in build/foulflock/config.py), and the current
+  rules.json. If you change build behavior, extend tests/python too.
 - Python deps are pinned in build/requirements.txt (runtime) and
   tests/python/requirements.txt (tests); dependabot
   (.github/dependabot.yml) bumps actions, npm, and pip weekly in grouped
@@ -317,9 +386,9 @@ Checks after any rules change:
   screenshot if the branding changes).
 - Protected places render as orange badge icons using Maki glyphs (CC0,
   https://labs.mapbox.com/maki-icons/) stored in web/assets/icons/ and
-  composed at runtime in app.js (loadPlaceIcon: white glyph on an orange
+  composed at runtime in web/js/icons.js (loadPlaceIcon: white glyph on an orange
   rounded square, so places don't read as camera dots). Worship icons pick christian/muslim/jewish variants from the
-  `religion` property, derived in build.py from the place's Overture
+  `religion` property, derived in build/foulflock/overture.py from the place's Overture
   taxonomy hierarchy (RELIGION_BY_ANCESTOR). To add a category, download the Maki SVG and add
   a row to PLACE_ICONS.
 - Two heuristic radii are user-adjustable at runtime (legend sliders,
@@ -327,9 +396,10 @@ Checks after any rules change:
   with no distance language, and "on premises" (default 50 m) for rules
   with `distance_basis` `on_premises` (VA) or `tbd` (CT guideline). The
   build scans candidates out to
-  --scan-max (400 m) for all non-statutory rules and app.js recomputes
+  --scan-max (400 m) for all non-statutory rules and web/js/radius.js recomputes
   flagged status client-side (applyBuffer). Statutory numeric distances
   are NOT affected by the sliders.
-- Plain-English onboarding lives in web/faq.html ("How & why", linked from
-  the topbar and About modal). Keep it jargon-free and keep the
+- Plain-English onboarding lives in the About dialog in web/index.html
+  (opened by the topbar About button or the #about deep link; web/faq.html
+  is a redirect stub for old How & why links). Keep it jargon-free and keep the
   not-legal-advice framing.

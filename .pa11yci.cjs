@@ -7,6 +7,13 @@ if (!["light", "dark"].includes(scheme)) {
 
 const base = "http://127.0.0.1:8081";
 
+const phone = { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+const tablet = { width: 820, height: 1180, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+const openAbout = [
+  "click element #about-btn",
+  "wait for element #about .modal-card to be visible",
+];
+
 module.exports = {
   defaults: {
     runners: ["axe"],
@@ -23,5 +30,16 @@ module.exports = {
       ],
     },
   },
-  urls: [`${base}/`, `${base}/faq.html`],
+  // Desktop is the default viewport; phone and tablet exercise the
+  // responsive layouts. The About dialog holds the how-it-works prose, so
+  // it is scanned open at each size too. pa11y-ci-action rejects repeated
+  // URLs, so each scenario gets its own (ignored) query string.
+  urls: [
+    { url: `${base}/` },
+    { url: `${base}/?scan=phone`, viewport: phone },
+    { url: `${base}/?scan=tablet`, viewport: tablet },
+    { url: `${base}/?scan=about`, actions: openAbout },
+    { url: `${base}/?scan=about-phone`, viewport: phone, actions: openAbout },
+    { url: `${base}/?scan=about-tablet`, viewport: tablet, actions: openAbout },
+  ],
 };

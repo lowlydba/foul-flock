@@ -16,6 +16,7 @@ const types = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".txt": "text/plain; charset=utf-8",
+  ".pmtiles": "application/octet-stream",
 };
 
 http.createServer((req, res) => {
@@ -33,9 +34,27 @@ http.createServer((req, res) => {
       res.writeHead(404);
       return res.end("not found");
     }
-    res.writeHead(200, {
+    const headers = {
       "content-type": types[path.extname(fp).toLowerCase()] || "application/octet-stream",
-    });
+      "accept-ranges": "bytes",
+    };
+    // PMTiles are read with HTTP range requests.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || "");
+    if (range && (range[1] || range[2])) {
+      const start = range[1] ? Number(range[1]) : Math.max(0, data.length - Number(range[2]));
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), data.length - 1) : data.length - 1;
+      if (start >= data.length || start > end) {
+        res.writeHead(416, { "content-range": `bytes */${data.length}` });
+        return res.end();
+      }
+      res.writeHead(206, {
+        ...headers,
+        "content-range": `bytes ${start}-${end}/${data.length}`,
+        "content-length": end - start + 1,
+      });
+      return res.end(data.subarray(start, end + 1));
+    }
+    res.writeHead(200, headers);
     res.end(data);
   });
 }).listen(port, "127.0.0.1");

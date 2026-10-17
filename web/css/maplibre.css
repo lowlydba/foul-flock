@@ -1,0 +1,38 @@
+/* MapLibre popups, attribution and scale control. */
+
+/* --------------------------- MapLibre chrome --------------------------- */
+
+/* Popups and attribution keep light cards in both schemes, so pin dark
+   ink and a readable link color on them. */
+.maplibregl-popup-content { font-size: 12.5px; color: #1f2328;
+  font-family: var(--font-ui); line-height: 1.45; }
+.maplibregl-popup-content a { color: #0f766e; }
+.maplibregl-popup-content:has(> .maplibregl-popup-close-button) {
+  padding-right: 36px;
+}
+.maplibregl-popup-close-button {
+  display: grid; place-items: center;
+  top: 4px; right: 4px; width: 24px; height: 24px;
+  margin: 0; padding: 0; border: none; border-radius: 3px;
+  background: transparent; color: inherit;
+  font: 20px/1 var(--font-ui); box-shadow: none;
+}
+.maplibregl-popup-close-button:hover {
+  background: rgba(0, 0, 0, .05); color: inherit;
+}
+.maplibregl-popup-close-button:focus-visible {
+  outline: 2px solid #0f766e; outline-offset: 1px;
+}
+.maplibregl-ctrl-attrib {
+  background: rgba(255, 255, 255, .92) !important;
+  font-family: var(--font-ui);
+}
+.maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib a {
+  color: #1f2328 !important; font-size: 11.5px;
+}
+.maplibregl-ctrl-scale {
+  font-family: var(--font-data); font-size: 10.5px;
+  background: rgba(255, 255, 255, .85); color: #1f2328;
+  border-color: #1f2328;
+}
+.state-tip .maplibregl-popup-content { padding: 6px 10px; }

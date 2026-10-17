@@ -1,0 +1,94 @@
+/* Foul Flock - map chrome on top of Pico CSS (classless, vendored at
+   assets/pico.classless.min.css). Loaded in this order after Pico:
+   tokens.css, chrome.css, panels.css, maplibre.css, responsive.css.
+
+   Division of labor:
+   - Pico owns base typography, links, buttons, form controls, details,
+     and the light/dark switch (prefers-color-scheme).
+   - tokens.css (this file) owns the theme tokens: fonts and colors, set
+     via --pico-* variables below.
+   - The other files own the map chrome: topbar, legend and Layers control
+     (chrome), detail panel and dialog (panels), MapLibre fixes, and the
+     tablet/phone layouts (responsive).
+
+   Color system, kept minimal: one interactive accent (deep teal) via
+   Pico's primary, neutral ink/paper from Pico, and status hues reserved
+   for meaning on the map (red flagged, blue clear, brown possibly-exempt,
+   purple law states, grey reviewed). All pairs meet WCAG 2.1 AA; asserted
+   by axe in tests/a11y.spec.js. */
+
+:root {
+  /* Fonts: system sans for UI/prose, monospace for data surfaces
+     (counts, coordinates, distances, code) - classic GIS pairing. */
+  --pico-font-family-sans-serif: -apple-system, "Segoe UI", system-ui,
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --pico-font-family-monospace: ui-monospace, "Cascadia Mono", Consolas,
+    "SF Mono", Menlo, monospace;
+  --pico-font-family: var(--pico-font-family-sans-serif);
+
+  /* Accent: deep teal, AA on light surfaces. */
+  --pico-primary: #0f766e;
+  --pico-primary-background: #0f766e;
+  --pico-primary-border: #0f766e;
+  --pico-primary-hover: #0c5d57;
+  --pico-primary-hover-background: #0c5d57;
+  --pico-primary-hover-border: #0c5d57;
+  --pico-primary-inverse: #ffffff;
+  --pico-background-color: #f7f7f5;
+
+  /* Aliases the map chrome reads; colors defer to Pico. */
+  --font-ui: var(--pico-font-family-sans-serif);
+  --font-data: var(--pico-font-family-monospace);
+  --bg: var(--pico-background-color);
+  --card: var(--pico-card-background-color);
+  --ink: var(--pico-color);
+  --muted: var(--pico-muted-color);
+  --border: var(--pico-muted-border-color);
+  --accent-text: var(--pico-primary);
+
+  /* Status hues (map semantics, not Pico's problem). */
+  --flagged: #e0332c;
+  --flagged-ink: #b3261e;
+  --clear: #2e7dd1;
+  --excluded: #8d6e2f;
+  --guideline: #f2a900;
+  --law: #8a3ffc;
+  --nolaw: #9aa1a9;
+  --warn-bg: #fdf6e0;
+  --warn-border: #e8d795;
+  --warn-ink: #6d5200;
+  --quote-bg: #f3f0fa;
+  --quote-ink: #3d2e5c;
+  --flagcard-bg: #fcf7f6;
+  --flagcard-border: #e6d5d3;
+  --flagcard-muted: var(--muted);
+  --shadow: rgba(15, 23, 32, .14);
+}
+
+/* Mirrors Pico's dark-scheme selector so these win over its defaults. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) {
+    --pico-primary: #4fd1c5;
+    --pico-primary-background: #0f766e;
+    --pico-primary-border: #0f766e;
+    --pico-primary-hover: #79ded5;
+    --pico-primary-hover-background: #0c5d57;
+    --pico-primary-hover-border: #0c5d57;
+    --pico-primary-inverse: #ffffff;
+    --pico-background-color: #14181d;
+
+    --flagged-ink: #ff7b72;
+    --clear: #79b8ff;
+    --excluded: #d4a72c;
+    --nolaw: #565e68;
+    --warn-bg: #2b230e;
+    --warn-border: #5c4a1a;
+    --warn-ink: #e3c878;
+    --quote-bg: #221c33;
+    --quote-ink: #cdbcf0;
+    --flagcard-bg: #271d1c;
+    --flagcard-border: #4a3232;
+    --flagcard-muted: #a8b1bc; /* Pico's dark muted falls under AA here */
+    --shadow: rgba(0, 0, 0, .5);
+  }
+}

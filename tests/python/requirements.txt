@@ -3,6 +3,7 @@
 # shapely let the place-stream tests feed real Arrow batches through the
 # parser; overturemaps itself is not required.
 pyyaml==6.0.3
+pmtiles==3.8.1
 pytest==9.1.1
 pyarrow==26.0.0
 shapely==2.2.0
