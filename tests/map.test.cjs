@@ -31,7 +31,24 @@ beforeEach(async () => {
     if (url.origin === base && url.pathname.startsWith("/data/")) {
       try {
         const body = await readFile(path.join(__dirname, "fixtures", "data", path.basename(url.pathname)));
-        await request.respond({ status: 200, contentType: "application/json", body });
+        const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers().range || "");
+        if (range) {
+          // PMTiles are read with HTTP range requests.
+          const [start, end] = [Number(range[1]), Math.min(Number(range[2]), body.length - 1)];
+          await request.respond({
+            status: 206,
+            contentType: "application/octet-stream",
+            headers: { "content-range": `bytes ${start}-${end}/${body.length}`, "accept-ranges": "bytes" },
+            body: body.subarray(start, end + 1),
+          });
+        } else {
+          await request.respond({
+            status: 200,
+            contentType: url.pathname.endsWith(".pmtiles") ? "application/octet-stream" : "application/json",
+            headers: { "accept-ranges": "bytes" },
+            body,
+          });
+        }
       } catch (err) {
         await request.abort();
         throw err;
@@ -132,6 +149,22 @@ for (const fontScale of [1, 2]) {
   });
 }
 
+test("detail panel shows when the camera was last edited in OSM, and the letter cites it", HARD_TIMEOUT, async () => {
+  await page.evaluate(async () => {
+    const gj = await (await fetch("data/cameras.geojson")).json();
+    window.__ff.openDetail(gj.features.find((f) => f.properties.last_edited));
+  });
+  const row = await page.$eval("#detail .kv time", (el) => ({
+    text: el.textContent, datetime: el.getAttribute("datetime"),
+    line: el.parentElement.textContent.replace(/\s+/g, " ").trim(),
+  }));
+  assert.equal(row.datetime, "2025-03-14");
+  assert.match(row.line, /^Last edited: 2025-03-14 \(\d+ (months|years) ago, in OpenStreetMap\)$/);
+  await page.click("#draft-report");
+  assert.match(await page.$eval("#report-text", (el) => el.value),
+    /Camera source: .+node\/\d+ \(© OpenStreetMap contributors\), record last edited 2025-03-14\./);
+});
+
 test("guideline camera detail panel has a banner, no report letter, and no a11y errors", HARD_TIMEOUT, async () => {
   const opened = await page.evaluate(async () => {
     const gj = await (await fetch("data/cameras.geojson")).json();
@@ -230,13 +263,15 @@ test("view cones load only near their zoom", HARD_TIMEOUT, async () => {
   assert.equal(coneRequests(), 1, "cones are fetched once");
 });
 
-test("'Nothing found' cameras are off by default and load per state on demand", HARD_TIMEOUT, async () => {
-  const shardRequests = (kind) => requested.filter((u) => u.includes(`${kind}_clear_`));
+test("'Nothing found' cameras are off by default and read from static tiles", HARD_TIMEOUT, async () => {
   const layer = (id) => page.evaluate((i) => ({
     visibility: window.__ff.map.getLayoutProperty(i, "visibility"),
     minzoom: window.__ff.map.getLayer(i).minzoom,
   }), id);
   const status = () => page.$eval("#clear-status", (el) => el.textContent);
+  const tileFeatures = (source, sourceLayer) => page.evaluate(
+    (s, l) => window.__ff.map.querySourceFeatures(s, { sourceLayer: l }).length, source, sourceLayer);
+  const camera = [-76.6346473, 36.9682134]; // fixture camera with no candidate place
 
   assert.equal(await page.$eval("#clear-toggle", (el) => el.checked), false);
   assert.equal(await page.$eval("#clear-toggle", (el) => el.disabled), false);
@@ -245,33 +280,44 @@ test("'Nothing found' cameras are off by default and load per state on demand", 
     assert.equal((await layer(id)).visibility, "none", `${id} hidden by default`);
   }
   assert.equal((await layer("cams-clear-far")).minzoom, 6);
-  assert.equal(shardRequests("cameras").length, 0, "no shard loads with the toggle off");
 
-  // On, but still national: nothing to fetch yet.
+  // On, but still national: the zoom hint shows.
   await page.click("#layers-btn");
   await page.click("#clear-toggle");
   assert.equal((await layer("cams-clear-far")).visibility, "visible");
-  await new Promise((r) => setTimeout(r, 300));
-  assert.equal(shardRequests("cameras").length, 0);
   assert.match(await status(), /zoom in/i);
 
-  // State zoom over Virginia: only that shard is fetched, once.
-  await page.evaluate(() => window.__ff.map.jumpTo({ center: [-77.4, 38.9], zoom: 8 }));
+  // State zoom: tiles for the view load and the status updates.
+  await page.evaluate((c) => window.__ff.map.jumpTo({ center: c, zoom: 8 }), camera);
   await page.waitForFunction(() => /Showing/.test(document.getElementById("clear-status").textContent));
-  assert.equal(shardRequests("cameras").length, 1);
-  assert.match(shardRequests("cameras")[0], /cameras_clear_VA\.geojson$/);
-  assert.equal(shardRequests("view_cones").length, 0, "cones wait for zoom 12");
-  const loaded = await page.evaluate(
-    () => window.__ff.map.getSource("clear-cams").serialize().data.features.length);
-  assert.ok(loaded > 0, "clear cameras reach the map source");
+  await page.waitForFunction(() => window.__ff.map.querySourceFeatures(
+    "clear-cams", { sourceLayer: "clear_cameras" }).length > 0);
+  const props = await page.evaluate(() => window.__ff.map.querySourceFeatures(
+    "clear-cams", { sourceLayer: "clear_cameras" })[0].properties);
+  assert.equal(props.camera_id, "osm-node-9451456653");
+  assert.equal(props.status, "checked_clear");
+  assert.match(props.osm_url, /openstreetmap\.org\/node\/9451456653$/);
+  assert.equal(props.brand, "Flock Safety");
 
-  await page.evaluate(() => window.__ff.map.jumpTo({ zoom: 12.5 }));
-  await new Promise((r) => setTimeout(r, 500));
-  assert.equal(shardRequests("view_cones").length, 1);
-  await page.evaluate(() => window.__ff.map.jumpTo({ center: [-77.4, 38.9], zoom: 8 }));
-  await new Promise((r) => setTimeout(r, 300));
-  assert.equal(shardRequests("cameras").length, 1, "shards are fetched once");
+  // Street zoom: the camera's view cone tile loads too.
+  await page.evaluate((c) => window.__ff.map.jumpTo({ center: c, zoom: 14 }), camera);
+  await page.waitForFunction(() => window.__ff.map.querySourceFeatures(
+    "clear-cones", { sourceLayer: "clear_cones" }).length > 0);
 
+  // Clicking a tile-backed camera opens the same detail panel.
+  await page.evaluate(() => new Promise((r) => window.__ff.map.once("idle", r)));
+  const pt = await page.evaluate((c) => window.__ff.map.project(c), camera);
+  await page.mouse.click(pt.x, pt.y);
+  await page.waitForSelector("#detail:not(.hidden)");
+  assert.match(await page.$eval("#detail", (el) => el.textContent), /nothing found/i);
+  assert.match(await page.$eval("#detail", (el) => el.textContent),
+    /Last edited:\s*2026-01-05 \(.+, in OpenStreetMap\)/);
+  const where = await page.$eval("#detail .kv", (el) => el.textContent);
+  const [lat, lon] = where.match(/-?\d+\.\d+/g).map(Number);
+  assert.ok(Math.abs(lat - camera[1]) < 1e-4 && Math.abs(lon - camera[0]) < 1e-4,
+    `tile position drifted: ${where}`);
+
+  await page.click("#layers-btn");
   await page.click("#clear-toggle");
   assert.equal((await layer("cams-clear-far")).visibility, "none");
   assert.equal(await status(), "");

@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+# build/ holds scripts, not a package; tests import its sibling modules.
+sys.path.insert(0, str(ROOT / "build"))
 
 
 @pytest.fixture(scope="session")

@@ -179,7 +179,7 @@
    "authority": "statute",
    "mechanism": "proximity",
    "title": "Virginia ALPR Act (HB 2724, 2025)",
-   "citation": "Va. Code Ann. § 2.2-3706.2 / 2025 Acts (verify final codification)",
+   "citation": "Va. Code Ann. \u00a7 2.2-3706.2 / 2025 Acts (verify final codification)",
    "effective_date": "2025-07-01",
    "distance_basis": "on_premises",
    "buffer_meters": null,
@@ -207,7 +207,7 @@
    "authority": "statute",
    "mechanism": "proximity",
    "title": "Virginia ALPR Act (HB 2724, 2025)",
-   "citation": "Va. Code Ann. § 2.2-3706.2 / 2025 Acts (verify final codification)",
+   "citation": "Va. Code Ann. \u00a7 2.2-3706.2 / 2025 Acts (verify final codification)",
    "effective_date": "2025-07-01",
    "distance_basis": "on_premises",
    "buffer_meters": null,
@@ -235,7 +235,7 @@
    "authority": "statute",
    "mechanism": "proximity",
    "title": "Virginia ALPR Act (HB 2724, 2025)",
-   "citation": "Va. Code Ann. § 2.2-3706.2 / 2025 Acts (verify final codification)",
+   "citation": "Va. Code Ann. \u00a7 2.2-3706.2 / 2025 Acts (verify final codification)",
    "effective_date": "2025-07-01",
    "distance_basis": "on_premises",
    "buffer_meters": null,
@@ -406,7 +406,7 @@
   {
    "state_code": "ME",
    "statute_status": "no_siting_law",
-   "summary": "29-A M.R.S. §2117-A use/retention limits; no siting language.",
+   "summary": "29-A M.R.S. \u00a72117-A use/retention limits; no siting language.",
    "sources": [
     {
      "url": "https://legislature.maine.gov/statutes/29-A/title29-Asec2117-A.html",
@@ -471,7 +471,7 @@
   {
    "state_code": "AR",
    "statute_status": "no_siting_law",
-   "summary": "Has ALPR statute: Ark. Code Ann. §§ 12-12-1801 to 12-12-1808 ('Automatic License Plate Reader System Act'), originally enacted Act 1491 (2013), significantly amended by Act 668 / SB 446 (signed April 2025, 95th General Assembly). The amendment allows private landowners and businesses to use ALPRs (data deleted after 60 days; state agencies and parking enforcement up to 150 days). Permissible users and retention only; no siting restrictions.",
+   "summary": "Has ALPR statute: Ark. Code Ann. \u00a7\u00a7 12-12-1801 to 12-12-1808 ('Automatic License Plate Reader System Act'), originally enacted Act 1491 (2013), significantly amended by Act 668 / SB 446 (signed April 2025, 95th General Assembly). The amendment allows private landowners and businesses to use ALPRs (data deleted after 60 days; state agencies and parking enforcement up to 150 days). Permissible users and retention only; no siting restrictions.",
    "sources": [
     {
      "url": "https://arkleg.state.ar.us/Bills/Detail?id=SB446&ddBienniumSession=2025%2F2025R",
@@ -484,7 +484,7 @@
   {
    "state_code": "CO",
    "statute_status": "no_alpr_statute",
-   "summary": "No ALPR-specific statute. C.R.S. § 24-72-113 (enacted 2010, still current) limits retention of all government 'passive surveillance records' - a category that CDOT guidance explicitly includes ALPR imagery - to 3 years, with access restrictions after year 1.",
+   "summary": "No ALPR-specific statute. C.R.S. \u00a7 24-72-113 (enacted 2010, still current) limits retention of all government 'passive surveillance records' - a category that CDOT guidance explicitly includes ALPR imagery - to 3 years, with access restrictions after year 1.",
    "sources": [
     {
      "url": "https://colorado.public.law/statutes/crs_24-72-113",
@@ -527,7 +527,7 @@
   {
    "state_code": "DC",
    "statute_status": "no_alpr_statute",
-   "summary": "No enacted ALPR statute. DC Code §§ 50-2209.01-50-2209.11 covers automated traffic enforcement (speed/red-light cameras) but not ALPR surveillance. MPD operates on an internal policy of 30-day on-board / 90-day central-server retention.",
+   "summary": "No enacted ALPR statute. DC Code \u00a7\u00a7 50-2209.01-50-2209.11 covers automated traffic enforcement (speed/red-light cameras) but not ALPR surveillance. MPD operates on an internal policy of 30-day on-board / 90-day central-server retention.",
    "sources": [
     {
      "url": "https://policecomplaints.dc.gov/publication/automated-license-plate-readers",
@@ -540,7 +540,7 @@
   {
    "state_code": "FL",
    "statute_status": "no_siting_law",
-   "summary": "Has ALPR statute: Fla. Stat. § 316.0777. Covers FDOT right-of-way installation at law enforcement request (agency pays, removable on 30 days notice), bars use for traffic citations, and makes data confidential. No siting restrictions near protected locations. FDOT separately revoked state-highway ALPR permits in 2026 (executive action; see the spirit-of rules).",
+   "summary": "Has ALPR statute: Fla. Stat. \u00a7 316.0777. Covers FDOT right-of-way installation at law enforcement request (agency pays, removable on 30 days notice), bars use for traffic citations, and makes data confidential. No siting restrictions near protected locations. FDOT separately revoked state-highway ALPR permits in 2026 (executive action; see the spirit-of rules).",
    "sources": [
     {
      "url": "https://www.leg.state.fl.us/Statutes/index.cfm?App_mode=Display_Statute&URL=0300-0399/0316/Sections/0316.0777.html",
@@ -579,7 +579,7 @@
   {
    "state_code": "ID",
    "statute_status": "no_siting_law",
-   "summary": "Has ALPR statute: Idaho Code § 49-1432 (enacted by S1180, Ch. 316, signed April 4, 2025, effective July 1, 2025). Limits agency use to criminal and traffic-accident investigations, missing persons, and traffic flow; requires access controls, training, and audits. No siting restrictions.",
+   "summary": "Has ALPR statute: Idaho Code \u00a7 49-1432 (enacted by S1180, Ch. 316, signed April 4, 2025, effective July 1, 2025). Limits agency use to criminal and traffic-accident investigations, missing persons, and traffic flow; requires access controls, training, and audits. No siting restrictions.",
    "sources": [
     {
      "url": "https://law.justia.com/codes/idaho/title-49/chapter-14/section-49-1432/",
@@ -670,7 +670,7 @@
   {
    "state_code": "MD",
    "statute_status": "no_siting_law",
-   "summary": "Has ALPR statute: Md. Code, Public Safety § 3-509, as amended by HB 1081 / SB 840 (enacted 2024, effective October 1, 2024). Prohibits LE agencies and their contracted vendors from selling ALPR data or licensing/subscribing access to it, limits vendor access and outside uploads (MCAC only), and mandates audits and breach notification. No siting restrictions.",
+   "summary": "Has ALPR statute: Md. Code, Public Safety \u00a7 3-509, as amended by HB 1081 / SB 840 (enacted 2024, effective October 1, 2024). Prohibits LE agencies and their contracted vendors from selling ALPR data or licensing/subscribing access to it, limits vendor access and outside uploads (MCAC only), and mandates audits and breach notification. No siting restrictions.",
    "sources": [
     {
      "url": "https://legiscan.com/MD/bill/HB1081/2024",
@@ -709,7 +709,7 @@
   {
    "state_code": "MN",
    "statute_status": "no_siting_law",
-   "summary": "Has ALPR statute: Minn. Stat. § 13.824 (enacted 2015, amended; Data Practices Act chapter) + § 626.8472 (policy requirement). Data is private, destroyed within 60 days unless tied to an investigation, tracking needs a warrant, with public logs and biennial audits. No siting restrictions.",
+   "summary": "Has ALPR statute: Minn. Stat. \u00a7 13.824 (enacted 2015, amended; Data Practices Act chapter) + \u00a7 626.8472 (policy requirement). Data is private, destroyed within 60 days unless tied to an investigation, tracking needs a warrant, with public logs and biennial audits. No siting restrictions.",
    "sources": [
     {
      "url": "https://www.revisor.mn.gov/statutes/cite/13.824",
@@ -748,7 +748,7 @@
   {
    "state_code": "MT",
    "statute_status": "no_siting_law",
-   "summary": "Has ALPR statute: Mont. Code Ann. § 46-5-117 (enacted via SB 344, signed May 8, 2023; 'Revise license plate laws'). Near-prohibition on government ALPR use on public highways, with exceptions (DOT planning, parking, truck screening, and law enforcement with a posted policy, annual audits, and listed purposes). Not a warrant requirement. No siting restrictions near schools, worship, or healthcare.",
+   "summary": "Has ALPR statute: Mont. Code Ann. \u00a7 46-5-117 (enacted via SB 344, signed May 8, 2023; 'Revise license plate laws'). Near-prohibition on government ALPR use on public highways, with exceptions (DOT planning, parking, truck screening, and law enforcement with a posted policy, annual audits, and listed purposes). Not a warrant requirement. No siting restrictions near schools, worship, or healthcare.",
    "sources": [
     {
      "url": "https://mca.legmt.gov/bills/mca/title_0460/chapter_0050/part_0010/section_0170/0460-0050-0010-0170.html",
@@ -761,7 +761,7 @@
   {
    "state_code": "NE",
    "statute_status": "no_siting_law",
-   "summary": "Has ALPR statute: Neb. Rev. Stat. §§ 60-3201 to 60-3209 ('Automatic License Plate Reader Privacy Act,' enacted 2018). Limits retention to 180 days unless flagged as evidence in a criminal proceeding.",
+   "summary": "Has ALPR statute: Neb. Rev. Stat. \u00a7\u00a7 60-3201 to 60-3209 ('Automatic License Plate Reader Privacy Act,' enacted 2018). Limits retention to 180 days unless flagged as evidence in a criminal proceeding.",
    "sources": [
     {
      "url": "https://ncc.nebraska.gov/automatic-license-plate-reader-resources",
@@ -917,7 +917,7 @@
   {
    "state_code": "TN",
    "statute_status": "no_siting_law",
-   "summary": "Has ALPR statute: Tenn. Code Ann. § 55-10-302 (enacted by 2014 Acts ch. 625, effective July 1, 2014). Caps storage of captured plate data from fixed cameras at 90 days unless part of an ongoing criminal investigation. No siting restrictions.",
+   "summary": "Has ALPR statute: Tenn. Code Ann. \u00a7 55-10-302 (enacted by 2014 Acts ch. 625, effective July 1, 2014). Caps storage of captured plate data from fixed cameras at 90 days unless part of an ongoing criminal investigation. No siting restrictions.",
    "sources": [
     {
      "url": "https://law.justia.com/codes/tennessee/title-55/chapter-10/part-3/section-55-10-302/",
@@ -943,7 +943,7 @@
   {
    "state_code": "UT",
    "statute_status": "no_siting_law",
-   "summary": "Has ALPR statute: Utah Code Ann. §§ 41-6a-2001 to 41-6a-2006 ('Automatic License Plate Reader System Act,' enacted 2013, amended by Ch. 251, 2024 General Session). Limits use to law enforcement business, retention to 9 months, with audits and annual reports. Stationary ALPRs on state highways need a UDOT permit (right-of-way permitting, not a protected- location rule). No siting restrictions near schools, worship, or healthcare.",
+   "summary": "Has ALPR statute: Utah Code Ann. \u00a7\u00a7 41-6a-2001 to 41-6a-2006 ('Automatic License Plate Reader System Act,' enacted 2013, amended by Ch. 251, 2024 General Session). Limits use to law enforcement business, retention to 9 months, with audits and annual reports. Stationary ALPRs on state highways need a UDOT permit (right-of-way permitting, not a protected- location rule). No siting restrictions near schools, worship, or healthcare.",
    "sources": [
     {
      "url": "https://le.utah.gov/xcode/Title41/Chapter6A/41-6a-P20.html",
@@ -956,7 +956,7 @@
   {
    "state_code": "VT",
    "statute_status": "no_siting_law",
-   "summary": "Has ALPR statute: 23 V.S.A. § 1607 (enacted 2013 No. 69, most recently amended by 2023 No. 135 (Adj. Sess.) § 1a, effective July 1, 2025). Requires operator certification, limits data access to law enforcement (older data needs written justification or a warrant), and caps retention at 18 months. Repeal and state-agency use ban scheduled 2027-07-01 (use ban, not siting). No siting restrictions.",
+   "summary": "Has ALPR statute: 23 V.S.A. \u00a7 1607 (enacted 2013 No. 69, most recently amended by 2023 No. 135 (Adj. Sess.) \u00a7 1a, effective July 1, 2025). Requires operator certification, limits data access to law enforcement (older data needs written justification or a warrant), and caps retention at 18 months. Repeal and state-agency use ban scheduled 2027-07-01 (use ban, not siting). No siting restrictions.",
    "sources": [
     {
      "url": "https://legislature.vermont.gov/statutes/section/23/015/01607",
@@ -1006,10 +1006,11 @@
    "source_url": "https://legislativeanalysis.org/wp-content/uploads/2025/09/Automatic-License-Plate-Recognition-Systems-Summary-of-State-Laws.pdf"
   }
  ],
- "clear_shards": {
-  "VA": {
-   "cameras": 1,
-   "cones": 1
-  }
- }
+ "clear_camera_count": 1,
+ "rule_bounds": [
+  -124.7644,
+  36.5426,
+  -75.2511,
+  49.0021
+ ]
 }

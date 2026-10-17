@@ -52,6 +52,9 @@ try:
 except ImportError:
     sys.exit("PyYAML required: pip install pyyaml")
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import vectortiles  # noqa: E402  (sibling module; build/ is not a package)
+
 ROOT = Path(__file__).resolve().parent.parent
 
 # CI pipes stdout, which makes Python block-buffer it; line-buffer so
@@ -61,10 +64,24 @@ RULES_FILE = ROOT / "rules" / "alpr_state_rules.yaml"
 CACHE_DIR = ROOT / "cache"
 OUT_DIR = ROOT / "web" / "data"
 # Cameras with no candidate place within the scan radius can never be
-# flagged at any slider setting, so they ship as lazy per-state shards
-# (the "Nothing found" toggle) instead of in the core cameras.geojson.
-CLEAR_CAMERAS_PREFIX = "cameras_clear_"
-CLEAR_CONES_PREFIX = "view_cones_clear_"
+# flagged at any slider setting, so they ship as static vector tiles
+# (PMTiles) behind the map's off-by-default "Nothing found" layer instead of
+# in the core cameras.geojson, which the slider logic keeps in memory.
+CLEAR_CAMERAS_ARCHIVE = "clear_cameras.pmtiles"
+CLEAR_CONES_ARCHIVE = "clear_cones.pmtiles"
+PLACES_ARCHIVE = "places.pmtiles"
+STATES_ARCHIVE = "states.pmtiles"
+# Zoom ranges per archive. Clear cameras show from zoom 6 (state level) and
+# are exact to ~2 m by zoom 12, which MapLibre overzooms beyond. Cones draw
+# at zoom 13+ and one tile level overzooms cleanly. Places draw from zoom
+# 10. State outlines are ~1 km simplified, so zoom 7 tiles overzoom fine.
+CLEAR_CAMERAS_ZOOMS = (6, 12)
+CONE_TILE_ZOOM = 13
+PLACES_ZOOMS = (10, 12)
+STATES_ZOOMS = (0, 7)
+# Cameras are tiled to a ~1.2 m grid, so a "same position" check against a
+# previous build tolerates a little drift (degrees, about 5 m).
+SEED_POSITION_TOLERANCE_DEG = 5e-5
 TAXONOMY_CSV = Path(__file__).resolve().parent / "vendor" / "overture_taxonomy.csv"
 
 OVERPASS_URLS = [
@@ -447,7 +464,7 @@ def fetch_cameras(state_code: str, offline: bool) -> list[dict]:
 [out:json][timeout:180];
 area["ISO3166-2"="US-{state_code}"][admin_level=4]->.st;
 node["man_made"="surveillance"]["surveillance:type"="ALPR"](area.st);
-out body;
+out meta;
 """
     data = overpass_query(f"cameras_{state_code}", q, offline)
     cams = []
@@ -463,6 +480,9 @@ out body;
             "operator": tags.get("operator"),
             "brand": tags.get("brand") or tags.get("manufacturer"),
             "direction": tags.get("camera:direction") or tags.get("direction"),
+            # UTC date of the node's last OSM edit; caches from before
+            # `out meta` lack it until the next cameras refresh.
+            "last_edited": (el.get("timestamp") or "")[:10] or None,
             "state_code": state_code,
         })
     return cams
@@ -579,23 +599,26 @@ def road_eval_key(rule: dict) -> str:
 
 def load_previous_cameras() -> dict[str, dict]:
     """camera_id -> {lat, lon, props} from the last emitted camera files
-    (cameras.geojson plus the per-state clear shards). Seeds road lookups
-    so a routine refresh only queries new or moved cameras. Empty if there
-    is no readable earlier build."""
-    prev = {}
-    paths = [OUT_DIR / "cameras.geojson",
-             *sorted(OUT_DIR.glob(f"{CLEAR_CAMERAS_PREFIX}*.geojson"))]
-    for i, path in enumerate(paths):
+    (cameras.geojson plus the clear-camera tiles). Seeds road lookups so a
+    routine refresh only queries new or moved cameras. Empty if there is no
+    readable earlier build."""
+    try:
+        gj = json.loads((OUT_DIR / "cameras.geojson").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    features = list(gj.get("features", []))
+    tiles = OUT_DIR / CLEAR_CAMERAS_ARCHIVE
+    if tiles.exists():
         try:
-            gj = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            if i == 0:
-                return {}
-            continue
-        for f in gj.get("features", []):
-            lon, lat = f["geometry"]["coordinates"][:2]
-            prev[f["properties"]["camera_id"]] = {
-                "lat": lat, "lon": lon, "props": f["properties"]}
+            features += vectortiles.read_features(tiles, "clear_cameras")
+        except Exception as e:  # unreadable archive: re-query, don't fail
+            print(f"    previous clear-camera tiles unreadable ({e}); "
+                  "road lookups will not be reused for them")
+    prev = {}
+    for f in features:
+        lon, lat = f["geometry"]["coordinates"][:2]
+        prev[f["properties"]["camera_id"]] = {
+            "lat": lat, "lon": lon, "props": f["properties"]}
     return prev
 
 
@@ -625,8 +648,8 @@ def apply_road_guidelines(cameras: list[dict], guideline_rules: list[dict],
         for cam in st_cams:
             prev = previous.get(cam["camera_id"])
             same = (prev is not None
-                    and round(prev["lat"], 6) == round(cam["lat"], 6)
-                    and round(prev["lon"], 6) == round(cam["lon"], 6)
+                    and abs(prev["lat"] - cam["lat"]) <= SEED_POSITION_TOLERANCE_DEG
+                    and abs(prev["lon"] - cam["lon"]) <= SEED_POSITION_TOLERANCE_DEG
                     and prev["props"].get("road_eval") == key)
             if not same:
                 todo.append(cam)
@@ -1171,8 +1194,8 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
     # view_cones.geojson - illustrative FOV cones where camera:direction exists
     cam_features = []
     cone_features = []
-    clear_cams = defaultdict(list)
-    clear_cones = defaultdict(list)
+    clear_cams = []
+    clear_cones = []
     for cam in cameras:
         cam_matches = sorted(matches_by_cam.get(cam["camera_id"], []),
                              key=lambda m: m["distance_m"])
@@ -1204,6 +1227,7 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
             "operator": cam["operator"],
             "brand": cam["brand"],
             "direction": cam["direction"],
+            "last_edited": cam.get("last_edited"),
             "has_cone": True if bearings else None,
             "match_count": len(within) or None,
             "matches": compact_matches(cam_matches),
@@ -1227,27 +1251,32 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
                            "bearing": b},
         } for b in bearings]
         if status == "checked_clear" and not cam_matches:
-            clear_cams[cam["state_code"]].append(feature)
-            clear_cones[cam["state_code"]].extend(cam_cones)
+            clear_cams.append(feature)
+            clear_cones.extend(cam_cones)
         else:
             cam_features.append(feature)
             cone_features.extend(cam_cones)
     write_geojson("cameras.geojson", cam_features)
     write_geojson("view_cones.geojson", cone_features)
 
-    # Per-state shards for cameras that can never be flagged; stale shards
-    # from an earlier build must not linger.
-    for old in OUT_DIR.glob("*_clear_*.geojson"):
-        old.unlink()
-    clear_shards = {}
-    for st in sorted(clear_cams):
-        write_geojson(f"{CLEAR_CAMERAS_PREFIX}{st}.geojson", clear_cams[st])
-        if clear_cones[st]:
-            write_geojson(f"{CLEAR_CONES_PREFIX}{st}.geojson", clear_cones[st])
-        clear_shards[st] = {"cameras": len(clear_cams[st]),
-                            "cones": len(clear_cones[st])}
+    # Never-flaggable cameras and their cones are static vector tiles the
+    # map reads by range request. Retired GeoJSON shards must not linger.
+    for old in (*OUT_DIR.glob("*_clear_*.geojson"), OUT_DIR / "places.geojson"):
+        old.unlink(missing_ok=True)
+    clear_tiles = {}
+    for name, feats, layer, lo, hi in (
+            (CLEAR_CAMERAS_ARCHIVE, clear_cams, "clear_cameras",
+             CLEAR_CAMERAS_ZOOMS[0], CLEAR_CAMERAS_ZOOMS[1]),
+            (CLEAR_CONES_ARCHIVE, clear_cones, "clear_cones",
+             CONE_TILE_ZOOM, CONE_TILE_ZOOM)):
+        path = OUT_DIR / name
+        if feats:
+            write_tiles(name, feats, layer, lo, hi)
+            clear_tiles[layer] = len(feats)
+        else:
+            path.unlink(missing_ok=True)
 
-    # places.geojson - only places involved in >=1 match (keeps file small)
+    # places.pmtiles - only places involved in >=1 match (keeps it small)
     matched_place_ids = {m["place_id"] for m in matches}
     place_features = []
     for places in places_by_cat.values():
@@ -1267,7 +1296,12 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
                         "overture_category": p.get("overture_category"),
                     },
                 })
-    write_geojson("places.geojson", place_features)
+    if place_features:
+        # Symbols are laid out across tiles, so no edge buffer copies.
+        write_tiles(PLACES_ARCHIVE, place_features, "places",
+                    PLACES_ZOOMS[0], PLACES_ZOOMS[1], point_buffer=False)
+    else:
+        (OUT_DIR / PLACES_ARCHIVE).unlink(missing_ok=True)
 
     # states.geojson - Overture division polygons annotated with law status.
     # States not yet reviewed get no feature at all (no overlay = no claim
@@ -1312,7 +1346,16 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
                     if g["state_code"] == code})) or None,
             },
         })
+    # states.geojson stays as the full-resolution seed for the next build's
+    # division lookup (the app never fetches it); states.pmtiles is what
+    # the map reads.
     write_geojson("states.geojson", state_features)
+    write_tiles(STATES_ARCHIVE, state_features, "states",
+                STATES_ZOOMS[0], STATES_ZOOMS[1])
+    siting = [f for f in state_features
+              if f["properties"]["law_status"] == "siting_law"]
+    rule_bounds = (
+        [round(v, 4) for v in vectortiles.bounds(siting)] if siting else None)
 
     # rules.json - public view of the curated rules for popups / report
     # drafting (maintainer_notes never leave the YAML)
@@ -1333,7 +1376,8 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
         },
         "rule_states": sorted(rule_states),
         "camera_count": len(cameras),
-        "clear_shards": clear_shards,
+        "clear_camera_count": len(clear_cams),
+        "rule_bounds": rule_bounds,
         "flagged_count": sum(1 for f in cam_features
                              if f["properties"]["status"] == "flagged"),
         "guideline_count": sum(1 for f in cam_features
@@ -1356,16 +1400,16 @@ def emit(cameras, places_by_cat, matches, rules, rules_doc, divisions,
     (OUT_DIR / "DATA_LICENSE.txt").write_text(
         "Data licenses for the files in this directory\n"
         "\n"
-        "cameras.geojson, view_cones.geojson, cameras_clear_*.geojson,\n"
-        "view_cones_clear_*.geojson:\n"
+        "cameras.geojson, view_cones.geojson, clear_cameras.pmtiles,\n"
+        "clear_cones.pmtiles:\n"
         "  Derived from OpenStreetMap. (c) OpenStreetMap contributors,\n"
         "  Open Database License (ODbL) 1.0. https://www.openstreetmap.org/copyright\n"
         "\n"
-        "states.geojson:\n"
+        "states.geojson, states.pmtiles:\n"
         "  Derived from the Overture Maps divisions theme, which contains\n"
         "  OpenStreetMap data. (c) Overture Maps Foundation, ODbL 1.0.\n"
         "\n"
-        "places.geojson:\n"
+        "places.pmtiles:\n"
         "  Derived from the Overture Maps places theme. (c) Overture Maps\n"
         "  Foundation, CDLA-Permissive-2.0.\n"
         "  https://cdla.dev/permissive-2-0/\n"
@@ -1383,6 +1427,15 @@ def write_geojson(name: str, features: list[dict]) -> None:
         {"type": "FeatureCollection", "features": features},
         default=json_default, separators=(",", ":")), encoding="utf-8")
     print(f"  wrote {name} ({len(features)} features, {path.stat().st_size/1e6:.1f} MB)")
+
+
+def write_tiles(name: str, features: list[dict], layer: str, minzoom: int,
+                maxzoom: int, point_buffer: bool = True) -> None:
+    stats = vectortiles.write_pmtiles(
+        OUT_DIR / name, features, layer, minzoom, maxzoom,
+        point_buffer=point_buffer)
+    print(f"  wrote {name} ({len(features)} features, {stats['tiles']} tiles, "
+          f"{stats['bytes']/1e6:.1f} MB)")
 
 
 # ---------------------------------------------------------------- main ----

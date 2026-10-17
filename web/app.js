@@ -30,19 +30,12 @@ let CAMS = null;   // cameras.geojson, mutated when the radius sliders move
 const CONE_MIN_ZOOM = 13;
 const CONE_LOAD_ZOOM = 12;
 // "Nothing found" cameras are ~90% of all points and hidden until the
-// legend toggle is on. Those with a candidate place nearby ship in the core
-// file (a wider slider radius could flag them); the rest are per-state
-// shards fetched only for the states in view.
+// Layers switch is on. Those with a candidate place nearby ship in the core
+// file (a wider slider radius could flag them); the rest are static vector
+// tiles (PMTiles) read by range request, so only tiles in view transfer.
 const CLEAR_MIN_ZOOM = 6;
-const CLEAR_CAMERAS_PREFIX = "cameras_clear_";
-const CLEAR_CONES_PREFIX = "view_cones_clear_";
 const CLEAR_HIDDEN_CONES = ["!=", ["get", "status"], "checked_clear"];
 let CLEAR_ON = false;
-let CLEAR_SHARDS = {}; // state code -> {cameras, cones} counts from rules.json
-const CLEAR_CAMS = { type: "FeatureCollection", features: [] };
-const CLEAR_CONES = { type: "FeatureCollection", features: [] };
-const SHARD_LOADS = {}; // url -> in-flight or settled fetch
-const STATE_BOUNDS = {}; // state code -> LngLatBounds
 const SLIDER_DEBOUNCE_MS = 120;
 let CONES = { type: "FeatureCollection", features: [] }; // synced to camera status
 let CONES_LOADED = false;
@@ -104,6 +97,14 @@ async function loadPlaceIcon(map, name, file) {
   ctx.drawImage(glyph, (size - g) / 2, (size - g) / 2, g, g);
   map.addImage(name, ctx.getImageData(0, 0, size, size), { pixelRatio: 2 });
 }
+
+// Static layers (states, places, clear cameras and their cones) are PMTiles
+// archives in web/data, read by HTTP range request through this protocol.
+maplibregl.addProtocol("pmtiles", new pmtiles.Protocol().tile);
+const tileSource = (name) => ({
+  type: "vector",
+  url: `pmtiles://${new URL(`data/${name}`, location.href).href}`,
+});
 
 const map = new maplibregl.Map({
   container: "map",
@@ -227,18 +228,24 @@ map.on("load", async () => {
   // cameras once, not twice.
   applyBuffer(CLOSE_M, ONPREM_M);
 
-  map.addSource("states", { type: "geojson", data: "data/states.geojson" });
+  map.addSource("states", tileSource("states.pmtiles"));
   map.addSource("cameras", { type: "geojson", data: CAMS });
-  map.addSource("places", { type: "geojson", data: "data/places.geojson" });
+  map.addSource("places", tileSource("places.pmtiles"));
   map.addSource("cones", { type: "geojson", data: CONES });
-  map.addSource("clear-cams", { type: "geojson", data: CLEAR_CAMS });
-  map.addSource("clear-cones", { type: "geojson", data: CLEAR_CONES });
-  map.on("moveend", () => { syncCones(); syncClear(); });
+  // A build with no never-flaggable cameras ships no clear archives.
+  const HAS_CLEAR = META.clear_camera_count > 0;
+  if (HAS_CLEAR) {
+    map.addSource("clear-cams", tileSource("clear_cameras.pmtiles"));
+    map.addSource("clear-cones", tileSource("clear_cones.pmtiles"));
+  }
+  map.on("moveend", syncCones);
+  map.on("zoomend", updateClearStatus);
 
   map.addLayer({
     id: "state-fill",
     type: "fill",
     source: "states",
+    "source-layer": "states",
     paint: {
       "fill-color": [
         "match", ["get", "law_status"],
@@ -258,6 +265,7 @@ map.on("load", async () => {
     id: "state-line",
     type: "line",
     source: "states",
+    "source-layer": "states",
     paint: {
       "line-color": [
         "match", ["get", "law_status"],
@@ -277,6 +285,7 @@ map.on("load", async () => {
     id: "places-pts",
     type: "symbol",
     source: "places",
+    "source-layer": "places",
     minzoom: 10,
     layout: {
       "icon-image": [
@@ -321,14 +330,17 @@ map.on("load", async () => {
     filter: CLEAR_HIDDEN_CONES,
     paint: CONE_PAINT,
   });
-  map.addLayer({
-    id: "view-cones-clear",
-    type: "fill",
-    source: "clear-cones",
-    minzoom: CONE_MIN_ZOOM,
-    layout: { visibility: "none" },
-    paint: CONE_PAINT,
-  });
+  if (HAS_CLEAR) {
+    map.addLayer({
+      id: "view-cones-clear",
+      type: "fill",
+      source: "clear-cones",
+      "source-layer": "clear_cones",
+      minzoom: CONE_MIN_ZOOM,
+      layout: { visibility: "none" },
+      paint: CONE_PAINT,
+    });
+  }
 
   map.addLayer({
     id: "cams-excluded",
@@ -360,15 +372,18 @@ map.on("load", async () => {
     filter: ["==", ["get", "status"], "checked_clear"],
     paint: CLEAR_DOT_PAINT,
   });
-  // Cameras with no candidate place nearby, fetched per state on demand.
-  map.addLayer({
-    id: "cams-clear-far",
-    type: "circle",
-    source: "clear-cams",
-    minzoom: CLEAR_MIN_ZOOM,
-    layout: { visibility: "none" },
-    paint: CLEAR_DOT_PAINT,
-  });
+  // Cameras with no candidate place nearby: static tiles, only in view.
+  if (HAS_CLEAR) {
+    map.addLayer({
+      id: "cams-clear-far",
+      type: "circle",
+      source: "clear-cams",
+      "source-layer": "clear_cameras",
+      minzoom: CLEAR_MIN_ZOOM,
+      layout: { visibility: "none" },
+      paint: CLEAR_DOT_PAINT,
+    });
+  }
   map.addLayer({
     id: "cams-guideline",
     type: "circle",
@@ -469,110 +484,40 @@ map.on("load", async () => {
       .addTo(map);
   });
 
-  // Zoom to rule states
-  try {
-    const states = await fetchJSON("data/states.geojson");
-    for (const f of states.features) {
-      const b = new maplibregl.LngLatBounds();
-      extendBounds(b, f.geometry);
-      STATE_BOUNDS[f.properties.state_code] = b;
-    }
-    const ruleFeats = states.features.filter(
-      (f) => f.properties.law_status === "siting_law"
-    );
-    if (ruleFeats.length) {
-      const b = new maplibregl.LngLatBounds();
-      for (const f of ruleFeats) extendBounds(b, f.geometry);
-      map.fitBounds(b, { padding: isCompact()
-        ? { top: topbarHeight() + 24, bottom: 24, left: 24, right: 24 }
-        : 60 });
-    }
-  } catch (err) {
-    console.error("States overlay failed to load:", err);
+  // Zoom to the siting-law states; the build precomputes their bounds so the
+  // states layer isn't downloaded just to measure it.
+  if (META.rule_bounds) {
+    const [w, s, e, n] = META.rule_bounds;
+    map.fitBounds([[w, s], [e, n]], { padding: isCompact()
+      ? { top: topbarHeight() + 24, bottom: 24, left: 24, right: 24 }
+      : 60 });
   }
 
-  // Enabled only now: shard selection needs the state bounds above.
-  CLEAR_SHARDS = META.clear_shards || {};
   const clearToggle = document.getElementById("clear-toggle");
   clearToggle.checked = false;
   clearToggle.disabled = false;
   clearToggle.addEventListener("change", () => setClearVisible(clearToggle.checked));
 });
 
-/* --------------------- "Nothing found" toggle + shards ----------------- */
+/* ----------------------------- "Nothing found" ------------------------- */
 
 function setClearVisible(on) {
   CLEAR_ON = on;
   const visibility = on ? "visible" : "none";
   for (const id of ["cams-clear", "cams-clear-far", "view-cones-clear"]) {
-    map.setLayoutProperty(id, "visibility", visibility);
+    if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibility);
   }
   map.setFilter("view-cones", on ? null : CLEAR_HIDDEN_CONES);
-  if (on) syncClear();
-  else setClearStatus("");
+  updateClearStatus();
 }
 
-function setClearStatus(text) {
+function updateClearStatus() {
+  const text = !CLEAR_ON ? ""
+    : map.getZoom() < CLEAR_MIN_ZOOM ? "Zoom in to a state to see them."
+    : "Showing cameras in view.";
   const el = document.getElementById("clear-status");
   // Skip no-op writes so the live region doesn't re-announce on every pan.
   if (el.textContent !== text) el.textContent = text;
-}
-
-function boundsOverlap(a, b) {
-  return a.getWest() <= b.getEast() && a.getEast() >= b.getWest() &&
-    a.getSouth() <= b.getNorth() && a.getNorth() >= b.getSouth();
-}
-
-const shardUrl = (prefix, state) => `data/${prefix}${state}.geojson`;
-
-function loadShard(prefix, state, sourceId, collection) {
-  const url = shardUrl(prefix, state);
-  SHARD_LOADS[url] ??= fetchJSON(url).then((gj) => {
-    for (const f of gj.features) collection.features.push(f);
-    map.getSource(sourceId).setData(collection);
-  }).catch((err) => {
-    delete SHARD_LOADS[url]; // let the next pan or toggle retry
-    throw err;
-  });
-  return SHARD_LOADS[url];
-}
-
-// Fetch shards for the states in view (cones only once they could draw).
-async function syncClear() {
-  if (!CLEAR_ON) return;
-  const zoom = map.getZoom();
-  if (zoom < CLEAR_MIN_ZOOM) {
-    setClearStatus("Zoom in to a state to see them.");
-    return;
-  }
-  const view = map.getBounds();
-  const wanted = [];
-  for (const [state, counts] of Object.entries(CLEAR_SHARDS)) {
-    const bounds = STATE_BOUNDS[state];
-    if (bounds && !boundsOverlap(bounds, view)) continue;
-    if (counts.cameras) {
-      wanted.push([CLEAR_CAMERAS_PREFIX, state, "clear-cams", CLEAR_CAMS]);
-    }
-    if (counts.cones && zoom >= CONE_LOAD_ZOOM) {
-      wanted.push([CLEAR_CONES_PREFIX, state, "clear-cones", CLEAR_CONES]);
-    }
-  }
-  if (wanted.some(([prefix, state]) => !SHARD_LOADS[shardUrl(prefix, state)])) {
-    setClearStatus("Loading…");
-  }
-  try {
-    await Promise.all(wanted.map((args) => loadShard(...args)));
-    if (CLEAR_ON) setClearStatus("Showing cameras for the states in view.");
-  } catch (err) {
-    console.error("Clear shards failed to load:", err);
-    if (CLEAR_ON) setClearStatus("Some data failed to load. Pan the map to retry.");
-  }
-}
-
-function extendBounds(b, geom) {
-  const walk = (c) =>
-    typeof c[0] === "number" ? b.extend(c) : c.forEach(walk);
-  walk(geom.coordinates);
 }
 
 /* ------------------------ adjustable heuristic radius ------------------ */
@@ -730,6 +675,7 @@ function openDetail(feature) {
     ${p.operator ? `<div class="kv"><b>Operator:</b> ${esc(p.operator)}</div>` : ""}
     ${p.brand ? `<div class="kv"><b>Brand:</b> ${esc(p.brand)}</div>` : ""}
     ${p.direction ? `<div class="kv"><b>Facing:</b> ${esc(p.direction)}°</div>` : ""}
+    ${p.last_edited ? `<div class="kv"><b>Last edited:</b> <time datetime="${esc(p.last_edited)}">${esc(p.last_edited)}</time> (${esc(ageLabel(p.last_edited))}, in OpenStreetMap)</div>` : ""}
     <div class="kv"><b>Source:</b> <a href="${esc(p.osm_url)}" target="_blank" rel="noopener">OpenStreetMap node</a> (crowdsourced)</div>
   `;
 
@@ -952,7 +898,8 @@ function draftReport(p, coords, matches) {
     "",
     "---",
     `Generated by ALPR Siting Compliance Map on ${new Date().toISOString().slice(0, 10)}.`,
-    `Camera source: ${p.osm_url} (© OpenStreetMap contributors).`,
+    `Camera source: ${p.osm_url} (© OpenStreetMap contributors)` +
+      (p.last_edited ? `, record last edited ${p.last_edited}.` : "."),
     `Statute source: ${rule.source_url || "[verify]"}.`
   );
   return lines.join("\n");
@@ -987,7 +934,7 @@ function cameraNear(point) {
   const r = isTouch() ? TAP_TOLERANCE_PX : 0;
   const hits = map.queryRenderedFeatures(
     r ? [[point.x - r, point.y - r], [point.x + r, point.y + r]] : point,
-    { layers: CAM_LAYERS }
+    { layers: CAM_LAYERS.filter((id) => map.getLayer(id)) }
   );
   if (!r || hits.length <= 1) return hits[0] || null;
   const d2 = (f) => {
@@ -1090,6 +1037,17 @@ function esc(s) {
 function fmtDate(rule) {
   const d = String(rule.effective_date || "?").slice(0, 10);
   return rule.date_approximate ? `about ${d}` : d;
+}
+
+// "today", "12 days ago", "7 months ago", "3 years ago" for an ISO date.
+function ageLabel(isoDate) {
+  const then = new Date(`${isoDate}T00:00:00Z`);
+  const days = Math.floor((Date.now() - then.getTime()) / 86400000);
+  if (Number.isNaN(days) || days < 0) return "date unavailable";
+  if (days < 1) return "today";
+  if (days < 60) return `${days} day${days === 1 ? "" : "s"} ago`;
+  if (days < 730) return `${Math.round(days / 30.44)} months ago`;
+  return `${Math.floor(days / 365.25)} years ago`;
 }
 
 document.getElementById("detail-close").addEventListener("click", () =>

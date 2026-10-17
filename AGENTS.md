@@ -10,7 +10,7 @@ A static map flagging ALPR cameras near legally-protected locations
 statutes. The legal core is `rules/alpr_state_rules.yaml` (hand-curated,
 never scraped). `build/build.py` fetches cameras from OSM/Overpass and
 places + state boundaries from Overture Maps, matches, and emits
-`web/data/*.geojson` consumed by the static MapLibre app in `web/`.
+`web/data/*.geojson` and PMTiles archives consumed by the static MapLibre app in `web/`.
 
 Read `README.md` first. Honesty rules are non-negotiable:
 
@@ -106,7 +106,11 @@ python build\build.py --refresh places,divisions   # just Overture data
 ```
 
 Overpass etiquette (cameras): the script rotates mirrors (overpass-api.de,
-kumi.systems, private.coffee) with backoff; do not tighten the sleep. If a
+kumi.systems, private.coffee) with backoff; do not tighten the sleep. The
+camera query uses `out meta` so each node's last OSM edit date lands in
+`last_edited` (shown in the detail panel and cited in the draft letter);
+only the date is kept, never the editor's identity. Caches written before
+that change lack the date until the next `--refresh cameras`. If a
 mirror hangs, delete the partial cache file and rerun - completed queries
 are cached and skipped.
 
@@ -130,7 +134,9 @@ Each probe takes about 10 s because the full-resolution polygons are large.
 for the national overlay.
 
 Road lookups for `road_class` guidelines are seeded the same way: cameras
-whose id and position match the previous `cameras.geojson`, evaluated under
+whose id and position match the previous `cameras.geojson` or
+`clear_cameras.pmtiles` (positions there are tile-rounded, so "match" allows
+about 5 m), evaluated under
 the same rule configuration, reuse its result, so a routine refresh only
 queries new or moved cameras. A cold run (no previous build, a changed
 `road_ref_regex`/`road_buffer_m`, or `--refresh roads`) looks up every
@@ -206,13 +212,13 @@ inconsistent field. The file has two entry lists:
 ## Rebuild and verify
 
 ```powershell
-pip install pyyaml overturemaps
+pip install pyyaml overturemaps pmtiles shapely     # or: pip install -r build\requirements.txt
 python build\build.py --offline                     # cache-only rebuild
-python -m http.server 8080 -d web                   # serve locally
+node tests\serve.cjs 8080 web                       # serve locally (PMTiles need range requests)
 ```
 
-(`--offline` needs only pyyaml; the overturemaps package is required for
-any non-cached fetch.)
+(`--offline` needs pyyaml, pmtiles and shapely; the overturemaps package is
+required for any non-cached fetch.)
 
 Checks after any rules change:
 
@@ -276,13 +282,27 @@ Checks after any rules change:
   the same in both schemes, so CI runs it once (light job).
 - Data payload: cameras with no candidate place inside the scan radius
   (about 80% of cameras) can never be flagged at any slider setting, so
-  build.py emits them as per-state shards (`cameras_clear_ST.geojson`,
-  `view_cones_clear_ST.geojson`, counts in rules.json `clear_shards`)
-  instead of in `cameras.geojson`. The legend's "Nothing found" toggle is
-  off by default; turning it on fetches only the shards for states in view
-  at zoom 6+ (cones at 12+). `view_cones.geojson` itself loads lazily near
-  zoom 13. Camera properties with no information (null, false, empty) are
-  omitted; descriptive and provenance fields are never trimmed.
+  build.py emits them, and their view cones, as static vector tiles
+  (`clear_cameras.pmtiles`, `clear_cones.pmtiles`) instead of in
+  `cameras.geojson`, which the slider logic keeps in memory. States and
+  protected places are `states.pmtiles` and `places.pmtiles` too. The
+  Layers panel's "Cameras with nothing found" switch is off by default;
+  MapLibre reads the archives by HTTP range request, so only tiles in view
+  transfer (cameras draw from zoom 6, cones from 13). Candidate cones stay
+  in `view_cones.geojson`, which loads lazily near zoom 13 and is restyled
+  as slider changes flip camera status. `build/vectortiles.py` is the
+  tiler and PMTiles writer (pins: `pmtiles` and `shapely` in
+  build/requirements.txt); `web/assets/pmtiles.js` is the vendored reader
+  (pmtiles 4.5.0, BSD-3-Clause; to update, copy `dist/pmtiles.js` from the
+  npm package and rerun `npm run test:map`). `states.geojson` stays in
+  web/data only as the full-resolution seed for the next build; the app
+  never fetches it. rules.json carries `rule_bounds` (initial fit) and
+  `clear_camera_count`. Static hosts must support range requests
+  (GitHub Pages and `tests/serve.cjs` do; `python -m http.server` does
+  not). Camera properties with no information (null, false, empty) are
+  omitted; descriptive and provenance fields are never trimmed. Tile
+  positions are rounded to ~1 m, so `last_edited`, `osm_url` and the node
+  id remain the exact reference.
 - Responsive modes (web/style.css "responsive modes", MODES in app.js; keep
   the breakpoints in sync): desktop > 1024px, tablet 641-1024px, phone
   <= 640px. Compact modes collapse the legend behind a topbar button and
@@ -295,8 +315,10 @@ Checks after any rules change:
   in tests/fixtures/data (real
   web/data is gitignored). If you change the data schema, regenerate
   fixtures from a fresh build: keep a couple of cameras per status,
-  matching view cones, a few places, WA/VA/OR states, a clear-camera shard
-  (`cameras_clear_VA`), and the current
+  matching view cones, a few places, WA/VA/OR states, a clear camera with
+  its cone, the PMTiles archives (regenerate them from GeoJSON with
+  `python build/vectortiles.py in.geojson out.pmtiles --layer L --minzoom
+  A --maxzoom B`, using the zoom constants in build.py), and the current
   rules.json. If you change build.py behavior, extend tests/python too.
 - Python deps are pinned in build/requirements.txt (runtime) and
   tests/python/requirements.txt (tests); dependabot

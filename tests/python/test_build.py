@@ -5,6 +5,7 @@ import json
 import sys
 import pytest
 
+import vectortiles as vt
 
 # ------------------------------------------------------------ geometry ----
 
@@ -529,13 +530,37 @@ def test_fetch_places_cache_and_mapping_invalidation(build_mod, sandbox):
 
 # ----------------------------------------------------------------- emit ----
 
+def test_fetch_cameras_reads_osm_last_edit_date(build_mod, monkeypatch):
+    elements = [
+        {"type": "node", "id": 7, "lat": 47.0, "lon": -122.0,
+         "timestamp": "2025-03-14T18:22:05Z", "user": "someone", "uid": 5,
+         "tags": {"brand": "Flock Safety", "direction": "90"}},
+        # a cache from before `out meta` has no timestamp
+        {"type": "node", "id": 8, "lat": 47.1, "lon": -122.1, "tags": {}},
+    ]
+    seen = {}
+
+    def fake_query(name, q, offline, **kw):
+        seen["q"] = q
+        return {"elements": elements}
+
+    monkeypatch.setattr(build_mod, "overpass_query", fake_query)
+    cams = {c["osm_id"]: c for c in build_mod.fetch_cameras("WA", offline=True)}
+    assert "out meta;" in seen["q"]
+    assert cams[7]["last_edited"] == "2025-03-14"
+    assert cams[8]["last_edited"] is None
+    # only the edit date is kept; editor identity stays out of the data
+    assert "user" not in cams[7] and "uid" not in cams[7]
+
+
 def test_emit_artifacts(build_mod, sandbox):
     rule = make_rule(buffer_specified=False, heuristic_buffer_meters=None,
                      last_verified="2026-07-18")
     cam_flagged = make_cam(camera_id="cam-flagged", osm_id=1, operator=None,
-                           brand=None, direction="90")
+                           brand=None, direction="90", last_edited="2025-03-14")
     cam_clear = make_cam(camera_id="cam-clear", osm_id=2, lat=48.5,
-                         operator=None, brand=None, direction=None)
+                         operator=None, brand=None, direction="45",
+                         last_edited="2026-01-05")
     # ~250 m from the place: clear at the default radius, but a wider
     # slider could flag it, so it must stay in the core file
     cam_near = make_cam(camera_id="cam-near", osm_id=3, lat=47.0025,
@@ -567,7 +592,8 @@ def test_emit_artifacts(build_mod, sandbox):
         ],
     }
     build_mod.OUT_DIR.mkdir(parents=True, exist_ok=True)
-    (build_mod.OUT_DIR / "cameras_clear_ZZ.geojson").write_text("{}")
+    for stale in ("cameras_clear_ZZ.geojson", "places.geojson"):
+        (build_mod.OUT_DIR / stale).write_text("{}")
     meta = build_mod.emit(
         [cam_flagged, cam_clear, cam_near], {"school": [place]}, matches,
         [rule], rules_doc, divisions, default_buffer=100, rule_states=["WA"],
@@ -582,29 +608,41 @@ def test_emit_artifacts(build_mod, sandbox):
     # candidates within the scan radius stay in the core file for the sliders
     assert by_id["cam-near"]["status"] == "checked_clear"
     assert json.loads(by_id["cam-near"]["matches"])
-    # a camera with no candidate anywhere can never be flagged: per-state shard
+    # a camera with no candidate anywhere can never be flagged: static tiles
     assert "cam-clear" not in by_id
-    shard = json.loads((out / "cameras_clear_WA.geojson").read_text(encoding="utf-8"))
-    clear = {f["properties"]["camera_id"]: f["properties"]
-             for f in shard["features"]}
-    assert clear["cam-clear"]["status"] == "checked_clear"
-    assert meta["clear_shards"] == {"WA": {"cameras": 1, "cones": 0}}
-    assert not (out / "view_cones_clear_WA.geojson").exists()
-    assert not (out / "cameras_clear_ZZ.geojson").exists(), "stale shard removed"
+    tiles = {f["properties"]["camera_id"]: f for f in vt.read_features(
+        out / "clear_cameras.pmtiles", "clear_cameras")}
+    assert set(tiles) == {"cam-clear"}
+    clear = tiles["cam-clear"]["properties"]
+    assert clear["status"] == "checked_clear"
+    # the OSM last-edit date rides along when known and is omitted when not
+    assert clear["last_edited"] == "2026-01-05"
+    assert by_id["cam-flagged"]["last_edited"] == "2025-03-14"
+    assert "last_edited" not in by_id["cam-near"]
+    lon, lat = tiles["cam-clear"]["geometry"]["coordinates"]
+    assert (lon, lat) == pytest.approx((-122.0, 48.5), abs=2e-5)
+    assert meta["clear_camera_count"] == 1
+    cones_clear = vt.read_features(out / "clear_cones.pmtiles", "clear_cones")
+    assert [f["properties"]["camera_id"] for f in cones_clear] == ["cam-clear"]
+    assert not list(out.glob("*_clear_*.geojson")), "stale shards removed"
+    assert not (out / "places.geojson").exists()
     # matches ride along as a JSON string for the web app
     assert isinstance(by_id["cam-flagged"]["matches"], str)
     assert json.loads(by_id["cam-flagged"]["matches"])[0]["place_id"] == "p-1"
     # empty/false/null values are omitted; provenance fields are always kept
-    assert not {"matches", "match_count", "road_flag", "road_rule_id"} & set(
-        clear["cam-clear"])
-    assert None not in clear["cam-clear"].values()
-    for props in [*by_id.values(), *clear.values()]:
+    assert not {"matches", "match_count", "road_flag", "road_rule_id"} & set(clear)
+    for props in [*by_id.values(), clear]:
         assert props["osm_url"].startswith("https://www.openstreetmap.org/node/")
     # a match's camera_id just repeats the feature's own
     assert "camera_id" not in json.loads(by_id["cam-flagged"]["matches"])[0]
 
     cones = json.loads((out / "view_cones.geojson").read_text(encoding="utf-8"))
     assert [f["properties"]["camera_id"] for f in cones["features"]] == ["cam-flagged"]
+
+    places_tiles = vt.read_features(out / "places.pmtiles", "places", zoom=12)
+    assert [f["properties"]["place_id"] for f in places_tiles] == ["p-1"]
+    state_tiles = vt.read_features(out / "states.pmtiles", "states", zoom=0)
+    assert {f["properties"]["state_code"] for f in state_tiles} == {"WA", "OR"}
 
     states = json.loads((out / "states.geojson").read_text(encoding="utf-8"))
     got = {f["properties"]["state_code"]: f["properties"]
@@ -790,15 +828,16 @@ def test_emit_guideline_status_and_poi(build_mod, sandbox):
     out = build_mod.OUT_DIR
     cams = {f["properties"]["camera_id"]: f["properties"] for f in json.loads(
         (out / "cameras.geojson").read_text(encoding="utf-8"))["features"]}
-    shard = {f["properties"]["camera_id"]: f["properties"] for f in json.loads(
-        (out / "cameras_clear_TX.geojson").read_text(encoding="utf-8"))["features"]}
+    tiles = {f["properties"]["camera_id"]: f["properties"] for f in vt.read_features(
+        out / "clear_cameras.pmtiles", "clear_cameras")}
     assert cams["tx-new"]["status"] == "guideline"
     assert "tx-old" not in cams
-    assert shard["tx-old"]["status"] == "checked_clear"   # grandfathered
-    assert shard["tx-old"]["road_ref"] == "TX 71"
-    # road lookups seed from shards too, or clear cameras would be re-queried
+    assert tiles["tx-old"]["status"] == "checked_clear"   # grandfathered
+    assert tiles["tx-old"]["road_ref"] == "TX 71"
+    # road lookups seed from the tiles too, or clear cameras would be re-queried
     prev = build_mod.load_previous_cameras()
     assert prev["tx-old"]["props"]["road_ref"] == "TX 71"
+    assert prev["tx-old"]["lat"] == pytest.approx(47.0, abs=2e-5)
     assert set(prev) == {"tx-new", "tx-old", "ct-1"}
     assert cams["ct-1"]["status"] == "guideline"
     assert meta["flagged_count"] == 0 and meta["guideline_count"] == 2
@@ -812,6 +851,5 @@ def test_emit_guideline_status_and_poi(build_mod, sandbox):
     assert states["CT"]["guideline_title"] == "CT guideline"
 
     # guideline-category places are emitted even when no camera is near
-    places = json.loads((out / "places.geojson").read_text(encoding="utf-8"))
-    assert {f["properties"]["place_id"] for f in places["features"]} == {
-        "clinic", "far"}
+    places = vt.read_features(out / "places.pmtiles", "places", zoom=12)
+    assert {f["properties"]["place_id"] for f in places} == {"clinic", "far"}

@@ -85,7 +85,8 @@ bearing only - they are not real detection zones.
 
 ```
 rules/alpr_state_rules.yaml   Hand-curated legal core. Never scraped/automated.
-build/build.py                Fetch (cached) -> match -> emit web/data/*.geojson
+build/build.py                Fetch (cached) -> match -> emit web/data/ (GeoJSON + PMTiles)
+build/vectortiles.py          Tiler + PMTiles writer for the map's static layers
 build/vendor/                 Pinned Overture places taxonomy (CC-BY-4.0)
 web/                          Static MapLibre app (no backend, no runtime APIs)
 docs/research/                Archived state-law survey outputs
@@ -96,9 +97,9 @@ AGENTS.md                     Maintenance runbook (state re-reviews, overrides)
 ## Build & run
 
 ```powershell
-pip install pyyaml overturemaps
+pip install -r build\requirements.txt
 python build\build.py                        # fetches (cached), then matches
-python -m http.server 8080 -d web            # then open http://localhost:8080
+node tests\serve.cjs 8080 web                # then open http://localhost:8080
 ```
 
 Useful flags: `--offline` (cache only), `--refresh [scope]` (ignore cache
