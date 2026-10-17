@@ -85,10 +85,11 @@ bearing only - they are not real detection zones.
 
 ```
 rules/alpr_state_rules.yaml   Hand-curated legal core. Never scraped/automated.
-build/build.py                Fetch (cached) -> match -> emit web/data/ (GeoJSON + PMTiles)
+build/build.py                Entry point: fetch (cached) -> match -> emit web/data/ (GeoJSON + PMTiles)
+build/foulflock/              The build pipeline, one module per concern (see AGENTS.md)
 build/vectortiles.py          Tiler + PMTiles writer for the map's static layers
 build/vendor/                 Pinned Overture places taxonomy (CC-BY-4.0)
-web/                          Static MapLibre app (no backend, no runtime APIs)
+web/                          Static MapLibre app: js/ (ES modules), css/ (no backend, no runtime APIs)
 docs/research/                Archived state-law survey outputs
 cache/                        Overpass + Overture response cache (safe to delete)
 AGENTS.md                     Maintenance runbook (state re-reviews, overrides)
