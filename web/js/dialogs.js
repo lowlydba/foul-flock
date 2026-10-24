@@ -10,6 +10,22 @@ document.getElementById("detail-close").addEventListener("click", () =>
   closeDetail({ restoreFocus: true })
 );
 
+// First-visit orientation: shown until dismissed or a camera is opened.
+const hintEl = document.getElementById("hint");
+const HINT_KEY = "ff-hint-dismissed";
+const hintSeen = () => {
+  try { return localStorage.getItem(HINT_KEY) === "1"; } catch { return false; }
+};
+export function dismissHint() {
+  hintEl.hidden = true;
+  try { localStorage.setItem(HINT_KEY, "1"); } catch { /* storage unavailable */ }
+}
+if (!hintSeen()) hintEl.hidden = false;
+document.getElementById("hint-close").addEventListener("click", dismissHint);
+new MutationObserver(() => {
+  if (!detailEl.classList.contains("hidden")) dismissHint();
+}).observe(detailEl, { attributes: true, attributeFilter: ["class"] });
+
 let aboutOpener = null;
 function openAbout() {
   aboutOpener = document.activeElement;
@@ -48,7 +64,8 @@ document.addEventListener("keydown", (e) => {
       closeDetail({ restoreFocus: true });
     }
   } else if (e.key === "Tab" && aboutOpen) {
-    const items = [...aboutEl.querySelectorAll("a[href], button")];
+    const items = [...aboutEl.querySelectorAll("a[href], button")]
+      .filter((el) => el.offsetParent !== null);
     const first = items[0];
     const last = items[items.length - 1];
     if (!aboutEl.contains(document.activeElement)) {

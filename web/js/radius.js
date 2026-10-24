@@ -125,10 +125,13 @@ export function updateStats() {
   const flagged = count("flagged");
   const guide = count("guideline");
   const gStates = state.META.guideline_states || [];
-  document.getElementById("stats").textContent =
-    `${flagged.toLocaleString()} flagged / ` +
-    `${state.META.camera_count.toLocaleString()} cameras · ${state.META.rule_states.join(", ")}` +
+  const stats = document.getElementById("stats");
+  stats.textContent =
+    `${flagged.toLocaleString()} flagged of ${state.META.camera_count.toLocaleString()} cameras`;
+  stats.title =
+    `Flagged in ${state.META.rule_states.join(", ")}` +
     (gStates.length
-      ? ` · ${guide.toLocaleString()} spirit-of (${gStates.join(", ")})`
-      : "");
+      ? `; ${guide.toLocaleString()} spirit-of guideline cameras in ${gStates.join(", ")}`
+      : "") +
+    `. Data built ${state.META.generated_at.slice(0, 10)}.`;
 }

@@ -23,12 +23,15 @@ export function openDetail(feature) {
         : p.status === "possible_exclusion" ? "Possibly exempt device type"
         : "Checked - nothing found"}
     </span>
-    <div class="kv"><b>Location:</b> ${coords[1].toFixed(5)}, ${coords[0].toFixed(5)} (${esc(p.state_code)})</div>
-    ${p.operator ? `<div class="kv"><b>Operator:</b> ${esc(p.operator)}</div>` : ""}
-    ${p.brand ? `<div class="kv"><b>Brand:</b> ${esc(p.brand)}</div>` : ""}
-    ${p.direction ? `<div class="kv"><b>Facing:</b> ${esc(p.direction)}°</div>` : ""}
-    ${p.last_edited ? `<div class="kv"><b>Last edited:</b> <time datetime="${esc(p.last_edited)}">${esc(p.last_edited)}</time> (${esc(ageLabel(p.last_edited))})</div>` : ""}
-    <div class="kv"><b>Source:</b> <a href="${esc(p.osm_url)}" target="_blank" rel="noopener">OpenStreetMap node</a> (crowdsourced)</div>
+    <details class="cam-meta">
+      <summary>Camera details</summary>
+      <div class="kv"><b>Location:</b> ${coords[1].toFixed(5)}, ${coords[0].toFixed(5)} (${esc(p.state_code)})</div>
+      ${p.operator ? `<div class="kv"><b>Operator:</b> ${esc(p.operator)}</div>` : ""}
+      ${p.brand ? `<div class="kv"><b>Brand:</b> ${esc(p.brand)}</div>` : ""}
+      ${p.direction ? `<div class="kv"><b>Facing:</b> ${esc(p.direction)}°</div>` : ""}
+      ${p.last_edited ? `<div class="kv"><b>Last edited:</b> <time datetime="${esc(p.last_edited)}">${esc(p.last_edited)}</time> (${esc(ageLabel(p.last_edited))})</div>` : ""}
+      <div class="kv"><b>Source:</b> <a href="${esc(p.osm_url)}" target="_blank" rel="noopener">OpenStreetMap node</a> (crowdsourced)</div>
+    </details>
   `;
 
   if (p.status === "flagged") {

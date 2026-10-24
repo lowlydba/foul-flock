@@ -54,8 +54,6 @@ map.on("load", async () => {
   );
 
   updateStats();
-  document.getElementById("stats").title =
-    `Data built ${META.generated_at.slice(0, 10)}`;
 
   initRadiusControls(SLIDERS);
   renderMethodNotes();

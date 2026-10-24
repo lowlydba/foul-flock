@@ -132,3 +132,27 @@ body { padding: 0; }
   margin: 0; padding: 0 8px; border: none; background: none;
   font-size: 24px; line-height: 1; color: var(--muted); }
 button, a, summary, input[type="range"] { touch-action: manipulation; }
+
+/* First-visit orientation hint, centered above the attribution bar. */
+#hint {
+  position: absolute; z-index: 5; left: 50%; transform: translateX(-50%);
+  bottom: 44px; width: min(460px, calc(100vw - 24px));
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; font-size: 13.5px; line-height: 1.4;
+  background: var(--bg); color: var(--ink);
+  border: 1px solid var(--border); border-left: 4px solid var(--law);
+  border-radius: 8px; box-shadow: 0 2px 10px var(--shadow);
+}
+#hint[hidden] { display: none; }
+#hint span { flex: 1; }
+#hint button { width: auto; margin: -4px -6px 0 0; padding: 0 8px; border: none;
+  background: none; font-size: 22px; line-height: 1; color: var(--muted);
+  min-width: 44px; min-height: 44px; }
+
+/* Secondary detail is collapsed by default. */
+.legend-group.radii summary { cursor: pointer; margin: 6px 0 0; }
+.cam-meta { margin: 8px 0 0; padding: 0; border: none; }
+.cam-meta summary { font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.about-more { margin-top: 14px; }
+.about-more > summary { font-weight: 600; cursor: pointer; }
+.tldr { font-size: 1.05em; }
