@@ -478,6 +478,7 @@ for (const mode of MODES) {
     assert.equal(await page.evaluate(() => document.activeElement.id), "legend-close");
     const close = await box("#legend-close");
     assert.ok(close.width >= 44 && close.height >= 44);
+    await page.$eval("#legend .radii", (el) => { el.open = true; });
     const slider = await box("#buffer-slider");
     assert.ok(slider.height >= 24, "slider needs a touch-sized hit area");
 

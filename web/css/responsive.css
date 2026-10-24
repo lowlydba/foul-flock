@@ -21,7 +21,9 @@
   #detail-close, .modal-close, #legend-close {
     display: inline-grid; place-items: center;
   }
-  #method-notes summary, .disclaimer summary { padding: 10px 0; }
+  #method-notes summary, .disclaimer summary,
+  .legend-group.radii summary, .cam-meta summary, .about-more > summary {
+    padding: 10px 0; min-height: 44px; box-sizing: border-box; }
   .buffer-row input[type="range"] { min-height: 32px; }
   .buffer-row input[type="range"]::-webkit-slider-thumb {
     width: 26px; height: 26px; margin-top: -9px; }
@@ -76,6 +78,10 @@
   #about-btn { order: 3; }
   #topbar::after { content: ""; order: 4; flex: 0 0 100%; height: 0; }
   #stats { order: 5; flex: 1 1 100%; min-width: 0; font-size: 12px; }
+  #hint { bottom: 52px; }
+  .maplibregl-ctrl-group button.maplibregl-ctrl-compass { display: none; }
+  .maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib a { font-size: 10.5px; }
+  .maplibregl-ctrl-attrib { line-height: 1.2; }
 
   #legend, #detail {
     left: 0; right: 0; width: auto; max-width: none;
