@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-02T06:58:02.496003+00:00",
+ "generated_at": "2026-11-03T07:42:55.698494+00:00",
  "default_heuristic_buffer_m": 100,
  "heuristic_scan_max_m": 400,
  "sliders": {
@@ -24,24 +24,24 @@
   "VA",
   "WA"
  ],
- "camera_count": 34067,
- "clear_camera_count": 27033,
- "clear_cone_count": 27704,
- "place_count": 8329,
+ "camera_count": 33972,
+ "clear_camera_count": 27010,
+ "clear_cone_count": 27690,
+ "place_count": 8226,
  "rule_bounds": [
   -124.7544,
   36.5408,
   -75.2427,
   49.0024
  ],
- "flagged_count": 477,
- "guideline_count": 2959,
+ "flagged_count": 474,
+ "guideline_count": 2960,
  "guideline_states": [
   "CT",
   "FL",
   "TX"
  ],
- "match_count": 650,
+ "match_count": 647,
  "rules": [
   {
    "state_code": "WA",
