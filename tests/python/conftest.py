@@ -49,6 +49,13 @@ class Pipeline:
         object.__setattr__(self, "_modules", modules)
         object.__setattr__(self, "_owners", owners)
 
+    @property
+    def __dict__(self):
+        # pytest >= 9.2 reads the old value of a patched name from the
+        # target's __dict__ so undo can restore it; expose the owned names.
+        return {name: getattr(mod, name) for name, mod in self._owners.items()
+                if hasattr(mod, name)}
+
     def __getattr__(self, name):
         if name in self._owners:
             return getattr(self._owners[name], name)
