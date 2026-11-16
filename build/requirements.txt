@@ -3,6 +3,6 @@
 # fetches. pmtiles and shapely are needed on every build: build/vectortiles.py
 # writes the map's PMTiles archives (shapely clips the state polygons).
 pyyaml==6.0.3
-overturemaps==1.0.2
+overturemaps==2.1.0
 pmtiles==3.8.1
 shapely==2.2.0
